@@ -7,10 +7,11 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <std_msgs/msg/float32.h>
+#include <std_msgs/msg/bool.h>
 
 
 /**
- * 环境传感器用头文件
+ * env_sensor header file
  */
 #include "Adafruit_BME280.h"
 #include "Adafruit_Sensor.h"
@@ -107,8 +108,10 @@ rclc_executor_t executor;
 rcl_node_t node;
 rcl_publisher_t temp_pub;
 rcl_publisher_t hum_pub;
+rcl_publisher_t inwater_pub;
 std_msgs__msg__Float32 temp_msg;
 std_msgs__msg__Float32 hum_msg;
+std_msgs__msg__Bool inwater_msg;
 
 /**
  * UDP Object;
@@ -116,11 +119,20 @@ std_msgs__msg__Float32 hum_msg;
 EthernetUDP udp;
 bool udp_opened = false;
 
+/**
+ * Water sensor 
+ */
+#define WATERSENSOR_PIN 38
+#define SONAR_ENABLE 39
+volatile bool isInWater = false;
+
+
 // ============================================================
 // 声明函数
 // ============================================================
 bool init_env_sensor();
 bool init_ethernet();
+bool init_water_sensor();
 bool create_microros_entities();
 void destroy_microros_entities();
 bool ping_agent();
@@ -250,6 +262,18 @@ bool init_ethernet()
 }
 
 /**
+ * Init water sensor & sonar enable pin
+ */
+bool init_water_sensor()
+{
+  pinMode(WATERSENSOR_PIN, INPUT_PULLUP);
+  Serial.println("[WATER_SENSOR] Init done");
+  pinMode(SONAR_ENABLE, OUTPUT);
+  Serial.println("[SONAR] Init done");
+  return true;
+}
+
+/**
  * Ping agent
  */
 bool ping_agent()
@@ -281,6 +305,7 @@ bool create_microros_entities()
   node = rcl_get_zero_initialized_node();
   temp_pub = rcl_get_zero_initialized_publisher();
   hum_pub = rcl_get_zero_initialized_publisher();
+  inwater_pub = rcl_get_zero_initialized_publisher();
 
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
 
@@ -289,6 +314,8 @@ bool create_microros_entities()
   RCCHECK(rclc_publisher_init_default(&temp_pub, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "/env_sensor/temperature"));
 
   RCCHECK(rclc_publisher_init_default(&hum_pub, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "/env_sensor/humidity"));
+
+  RCCHECK(rclc_publisher_init_default(&inwater_pub, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool), "/water_sensor"));
 
   Serial.println("[micro-ROS] create node and publisher ok");
   return true;
@@ -314,6 +341,12 @@ void destroy_microros_entities()
     hum_pub = rcl_get_zero_initialized_publisher();
   }
 
+  if (inwater_pub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_publisher_fini(&inwater_pub, &node));
+    inwater_pub = rcl_get_zero_initialized_publisher();
+  }
+
   // node fini
   if (node.impl != NULL)
   {
@@ -329,11 +362,10 @@ void destroy_microros_entities()
   Serial.println("[micro-ROS] destroy node&pub done");
 }
 
-
 /**
  * env sensor freeRTOS task
  */
-void sensor_task(void *parameter)
+void env_sensor_task(void *parameter)
 {
   (void)parameter;
 
@@ -398,10 +430,12 @@ void micro_ros_task(void *parameter)
 
   SensorData_t local_data;
   uint32_t last_ping_check_ms = 0;
-  uint32_t last_publish_ms = 0;
+  uint32_t last_env_publish_ms  = 0;
+  uint32_t last_inwater_publish_ms = 0;
 
-  const uint32_t publish_period_ms = 1000;
+  const uint32_t publish_env_period_ms = 1000;
   const uint32_t alive_check_period_ms = 2000;
+  const uint32_t publish_inwater_period_ms = 500;
 
   for (;;)
   {
@@ -432,7 +466,8 @@ void micro_ros_task(void *parameter)
         {
           g_agent_state = AGENT_CONNECTED;
           last_ping_check_ms = millis();
-          last_publish_ms = millis();
+          last_env_publish_ms  = millis();
+          last_inwater_publish_ms = millis();
           Serial.println("[state] AGENT_CONNECTED");
         }
         else
@@ -463,10 +498,10 @@ void micro_ros_task(void *parameter)
           }
         }
 
-        // 2) 周期发布数据
-        if (now - last_publish_ms >= publish_period_ms)
+        // 2) 周期发布环境数据
+        if (now - last_env_publish_ms  >= publish_env_period_ms)
         {
-          last_publish_ms = now;
+          last_env_publish_ms  = now;
 
           bool has_data = false;
 
@@ -487,14 +522,14 @@ void micro_ros_task(void *parameter)
 
             if (ret1 == RCL_RET_OK && ret2 == RCL_RET_OK)
             {
-              Serial.print("[publish] T=");
+              Serial.print("[publish env] T=");
               Serial.print(local_data.temperature);
               Serial.print(" H=");
               Serial.println(local_data.humidity);
             }
             else
             {
-              Serial.print("[publish] failed ret1=");
+              Serial.print("[publish env] failed ret1=");
               Serial.print((int)ret1);
               Serial.print(" ret2=");
               Serial.println((int)ret2);
@@ -503,7 +538,7 @@ void micro_ros_task(void *parameter)
               // 这里进一步检查一次 agent
               if (!check_agent_alive())
               {
-                Serial.println("[publish] agent confirmed lost");
+                Serial.println("[publish env] agent confirmed lost");
                 destroy_microros_entities();
                 g_agent_state = AGENT_DISCONNECTED;
                 break;
@@ -512,7 +547,37 @@ void micro_ros_task(void *parameter)
           }
           else
           {
-            Serial.println("[publish] no valid sensor data yet");
+            Serial.println("[publish env] no valid sensor data yet");
+          }
+        }
+
+
+        // 3) 每 500ms 发布水传感器状态
+        if (now - last_inwater_publish_ms >= publish_inwater_period_ms)
+        {
+          last_inwater_publish_ms = now;
+
+          inwater_msg.data = isInWater;
+
+          rcl_ret_t ret = rcl_publish(&inwater_pub, &inwater_msg, NULL);
+
+          if (ret == RCL_RET_OK)
+          {
+            Serial.print("[publish water] isInWater=");
+            Serial.println(isInWater ? "true" : "false");
+          }
+          else
+          {
+            Serial.print("[publish water] failed ret=");
+            Serial.println((int)ret);
+
+            if (!check_agent_alive())
+            {
+              Serial.println("[publish water] agent confirmed lost");
+              destroy_microros_entities();
+              g_agent_state = AGENT_DISCONNECTED;
+              break;
+            }
           }
         }
 
@@ -529,33 +594,29 @@ void micro_ros_task(void *parameter)
   }
 }
 
+/**
+ * Water sensor and sonar task
+ */
+void water_sensor_sonar_task(void *parameter)
+{
+  (void)parameter;
+  for (;;)
+  {
+    isInWater = !digitalRead(WATERSENSOR_PIN);
+    if (isInWater)
+    {
+      digitalWrite(SONAR_ENABLE, HIGH);
+      Serial.println("[WATER] in water");
+    }
+    else
+    {
+      digitalWrite(SONAR_ENABLE, LOW);
+      Serial.println("[WATER] out of");
+    }
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+}
 
-// void micro_ros_task(void *parameter)
-// {
-//   (void)parameter;
-
-//   SensorData_t local_data;
-
-//   Serial.println("micro_ros_task start");
-
-//   allocator = rcl_get_default_allocator();
-
-//   Serial.println("before support init");
-//   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
-//   Serial.println("support init ok");
-
-//   Serial.println("before node init");
-//   RCCHECK(rclc_node_init_default(&node, "fishbot_motion_control", "", &support));
-//   Serial.println("node init ok");
-
-//   // Serial.println("before executor init");
-//   // RCCHECK(rclc_executor_init(&executor, &support.context, 0, &allocator));
-//   // Serial.println("executor init ok");
-
-//   // Serial.println("executor spin");
-//   // rclc_executor_spin(&executor);
-//   vTaskDelete(NULL);
-// }
 
 void setup()
 {
@@ -605,25 +666,19 @@ void setup()
     }
   }
 
-  // 5. 创建任务
-  xTaskCreate(
-      sensor_task,
-      "sensor_task",
-      4096,
-      NULL,
-      1,
-      NULL);
+  /**
+   * Init water sensor and sonar
+   */
+  init_water_sensor();
 
-  xTaskCreate(
-      micro_ros_task,
-      "micro_ros_task",
-      12288,
-      NULL,
-      1,
-      NULL);
+  // 5. 创建任务
+  xTaskCreate(env_sensor_task, "env_sensor_task", 4096, NULL, 1, NULL);
+
+  xTaskCreate(micro_ros_task, "micro_ros_task", 12288, NULL, 5, NULL);
+
+  xTaskCreate(water_sensor_sonar_task, "water_sensor_sonar_task", 2048, NULL, 3, NULL);
 
   Serial.println("[system] tasks created");
-
 }
 
 void loop()
