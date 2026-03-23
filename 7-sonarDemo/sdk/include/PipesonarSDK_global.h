@@ -1,0 +1,12 @@
+#ifndef PIPESONARSDK_GLOBAL_H
+#define PIPESONARSDK_GLOBAL_H
+
+#include <QtCore/qglobal.h>
+
+#if defined(PIPESONARSDK_LIBRARY)
+#  define PIPESONARSDK_EXPORT Q_DECL_EXPORT
+#else
+#  define PIPESONARSDK_EXPORT Q_DECL_IMPORT
+#endif
+
+#endif // PIPESONARSDK_GLOBAL_H

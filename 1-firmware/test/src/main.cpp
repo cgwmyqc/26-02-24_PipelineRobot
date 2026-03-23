@@ -87,6 +87,7 @@
 
 void setup()
 {
+  pinMode(38, INPUT_PULLUP);
   Serial.begin(115200);
   Serial.println("Serial init");
 }

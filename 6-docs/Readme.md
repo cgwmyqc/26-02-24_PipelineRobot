@@ -29,3 +29,50 @@ ros2 topic echo /fixed_controller/travel_m
 ```
 ros2 topic echo /fixed_controller/motion_reached
 ```
+
+
+
+
+
+# 声呐Demo
+
+1、先用QTCreator生成基础基于CMake的项目。
+
+2、用VSCode打开该项目。
+
+3、为vscode指定qt编译路径。
+
+在.vscode/settings.json中指定：
+
+```
+{
+    "cmake.configureSettings": {
+        "CMAKE_PREFIX_PATH": "E:/QT5/5.12.12/5.12.12/msvc2017_64"
+    }    
+}
+```
+
+
+
+4、Cmake插件下方指定编译模式为release，我使用的是MSVC2019编译的，编译Debug有bug
+
+5、Cmake插件下方选色工具包：指定MSVC2019 X86_64编译套件
+
+6、点击生成。
+
+7、使用QT提供的windeployqt工具拷贝运行时需要的库。(上面第4条的bug就是出在此出，使用qt提供的工具在拷贝debug版的dll时，platforms中qwindows.dll会拷贝成release版本的，需要手动拷贝debug版本的，解决方案见注意)
+
+```shell
+# 进入编译出的release目录
+cd ./build/Realse
+
+# 使用工具自动拷贝
+E:\QT5\5.12.12\5.12.12\msvc2017_64\bin\windeployqt.exe 7-sonarDemo.exe
+E:\QT5\5.12.12\5.12.12\msvc2017_64\bin\windeployqt.exe 7-sonarDemo.exe
+```
+
+注意：若使用debug版本，windeployqt工具向platforms中拷贝的是release版本的qwindows.dll，应该拷贝的是`E:\QT5\5.12.12\5.12.12\msvc2017_64\plugins\platforms`中的qwindowsd.dll，手动拷贝进去，就行了。
+
+![](.\Asset\1.png)
+
+8、拷贝完成后就可以点击运行按钮运行工程了

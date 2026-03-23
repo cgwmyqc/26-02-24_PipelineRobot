@@ -1,0 +1,119 @@
+# =========================================
+# Global OS / Editor
+# =========================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# =========================================
+# IDE
+# =========================================
+.vscode/
+.idea/
+
+# =========================================
+# Logs
+# =========================================
+*.log
+logs/
+
+# =========================================
+# Environment / local config
+# =========================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# =========================================
+# Node / Vue / Vite
+# =========================================
+**/node_modules/
+**/.npm-cache/
+**/.npm/
+**/dist/
+**/coverage/
+**/.cache/
+**/.eslintcache
+
+# =========================================
+# PlatformIO / Embedded
+# =========================================
+**/.pio/
+**/.pioenvs/
+**/.piolibdeps/
+
+# 如果你不想提交 VSCode 的 PlatformIO 配置
+**/.vscode/
+
+# =========================================
+# CMake / Qt / C++
+# =========================================
+**/build/
+**/cmake-build-*/
+**/CMakeCache.txt
+**/CMakeFiles/
+**/Makefile
+**/compile_commands.json
+**/cmake_install.cmake
+**/*.user
+**/CMakeLists.txt.user
+
+# Qt creator / generated
+**/moc_*.cpp
+**/ui_*.h
+**/qrc_*.cpp
+**/*.pro.user
+**/*.autosave
+
+# executables / libraries
+**/*.exe
+**/*.out
+**/*.app
+**/*.dll
+**/*.so
+**/*.a
+**/*.lib
+**/*.obj
+**/*.o
+**/*.pdb
+
+# =========================================
+# Python / ROS2
+# =========================================
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+
+# ROS2 colcon / ament build products
+2-ros2_ws/build/
+2-ros2_ws/install/
+2-ros2_ws/log/
+
+# =========================================
+# Docker
+# =========================================
+**/.docker/
+docker-data/
+*.tar
+
+# =========================================
+# Local runtime config
+# =========================================
+**/setting.ini
+
+# 如果你希望提交模板而忽略真实配置，可改成：
+# **/setting.ini
+# !**/setting.ini.example
+
+# =========================================
+# Sonar demo specific
+# =========================================
+7-sonarDemo/build/
+7-sonarDemo/CMakeLists.txt.user

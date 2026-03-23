@@ -1,0 +1,104 @@
+﻿:root {
+  color-scheme: dark;
+  --panel-border: rgba(103, 212, 255, 0.18);
+  --brand: #75f0c2;
+  --text: #ecf7ff;
+  --text-muted: rgba(226, 241, 255, 0.72);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100%;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background:
+    radial-gradient(circle at 30% 35%, rgba(43, 133, 97, 0.18), transparent 28%),
+    radial-gradient(circle at 72% 30%, rgba(56, 124, 175, 0.2), transparent 24%),
+    linear-gradient(180deg, #0a1423 0%, #06111f 100%);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 58% 42%;
+  gap: 16px;
+  padding: 0 18px 18px;
+}
+
+.panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(18, 34, 54, 0.85), rgba(10, 24, 40, 0.9));
+  border: 1px solid var(--panel-border);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 194, 0.04), 0 12px 26px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-top: 14px solid var(--brand);
+  border-right: 14px solid transparent;
+  opacity: 0.9;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 18px;
+  background: rgba(31, 45, 65, 0.9);
+  border-bottom: 1px solid rgba(117, 240, 194, 0.08);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.panel-body {
+  height: calc(100% - 42px);
+}
+
+.el-table,
+.el-table tr,
+.el-table th.el-table__cell,
+.el-table td.el-table__cell {
+  background: transparent;
+}
+
+.el-table {
+  color: var(--text);
+  --el-table-border-color: rgba(103, 212, 255, 0.08);
+  --el-table-header-text-color: rgba(236, 247, 255, 0.75);
+  --el-table-text-color: rgba(236, 247, 255, 0.92);
+  --el-table-row-hover-bg-color: rgba(117, 240, 194, 0.08);
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  background: rgba(11, 23, 38, 0.9);
+  box-shadow: 0 0 0 1px rgba(103, 212, 255, 0.08) inset;
+}
+
+.el-button--success {
+  --el-button-bg-color: #7bf0bc;
+  --el-button-border-color: #7bf0bc;
+  --el-button-hover-bg-color: #94f4c8;
+  --el-button-hover-border-color: #94f4c8;
+  --el-button-text-color: #062116;
+}
