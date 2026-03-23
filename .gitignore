@@ -38,6 +38,7 @@ logs/
 **/coverage/
 **/.cache/
 **/.eslintcache
+**/.vite/
 
 # =========================================
 # PlatformIO / Embedded
