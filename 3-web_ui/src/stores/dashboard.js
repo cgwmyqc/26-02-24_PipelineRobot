@@ -2,6 +2,22 @@ import { defineStore } from 'pinia'
 import { exportInspectionRecord, fetchInspectionDetail, fetchInspectionHistory } from '../api/history'
 import { appConfig } from '../config/app'
 
+const MODE_MAP = {
+  0: '手动',
+  1: '自动'
+}
+
+const ENVIRONMENT_MAP = {
+  0: '非满水',
+  1: '满水'
+}
+
+const RESULT_MAP = {
+  0: '无异常',
+  1: '裂缝预警',
+  2: '淤泥预警'
+}
+
 function formatDateOnly(value) {
   if (!value) {
     return '--'
@@ -9,39 +25,67 @@ function formatDateOnly(value) {
   return String(value).trim().slice(0, 10)
 }
 
-function normalizeOperator(value) {
-  const normalized = String(value || '').trim()
-  if (!normalized) {
+function mapCode(value, mapping) {
+  if (value === null || value === undefined || value === '') {
     return '--'
   }
-  return normalized === 'operator.admin' ? 'admin' : normalized
+  const normalized = String(value).trim()
+  return mapping[normalized] ?? normalized
+}
+
+function normalizeOperator(value) {
+  const normalized = String(value || '').trim()
+  return normalized || '--'
 }
 
 function normalizeHistoryRecord(record) {
   return {
     ...record,
+    mode: mapCode(record?.mode, MODE_MAP),
+    environment: mapCode(record?.environment, ENVIRONMENT_MAP),
     operator: normalizeOperator(record?.operator),
+    result: mapCode(record?.result, RESULT_MAP),
     createdAt: formatDateOnly(record?.createdAt),
     inspectionTime: formatDateOnly(record?.inspectionTime)
+  }
+}
+
+function normalizeDetailRecord(record) {
+  return {
+    ...record,
+    mode: mapCode(record?.mode, MODE_MAP),
+    environment: mapCode(record?.environment, ENVIRONMENT_MAP),
+    operator: normalizeOperator(record?.operator),
+    result: mapCode(record?.result, RESULT_MAP),
+    createdAt: formatDateOnly(record?.createdAt),
+    inspectionTime: formatDateOnly(record?.inspectionTime),
+    videoUrl: normalizeAssetUrl(record?.videoUrl),
+    anomalies: Array.isArray(record?.anomalies)
+      ? record.anomalies.map((item) => ({
+          ...item,
+          anomalyType: mapCode(item?.anomalyType, RESULT_MAP),
+          imageUrl: normalizeAssetUrl(item?.imageUrl)
+        }))
+      : []
   }
 }
 
 const mockHistory = [
   {
     id: 1,
-    mode: '自动巡检',
-    environment: '满水环境',
+    mode: '1',
+    environment: '0',
     operator: 'admin',
-    result: '裂缝预警',
+    result: '1',
     createdAt: '2026-03-20',
     inspectionTime: '2026-03-20'
   },
   {
     id: 2,
-    mode: '人工巡检',
-    environment: '非满水环境',
+    mode: '0',
+    environment: '1',
     operator: 'admin',
-    result: '未发现异常',
+    result: '2',
     createdAt: '2026-03-18',
     inspectionTime: '2026-03-18'
   }
@@ -49,18 +93,18 @@ const mockHistory = [
 
 const mockDetail = {
   id: 1,
-  mode: '自动巡检',
-  environment: '满水环境',
+  mode: '1',
+  environment: '0',
   operator: 'admin',
-  result: '裂缝预警',
+  result: '1',
   inspectionTime: '2026-03-20',
   createdAt: '2026-03-20',
   videoUrl: '',
   anomalies: [
     {
       id: 1,
-      anomalyType: '裂缝',
-      remark: '管壁中段发现疑似裂缝',
+      anomalyType: '1',
+      remark: '管壁上方出现连续裂缝痕迹。',
       imageUrl: ''
     }
   ]
@@ -118,7 +162,7 @@ export const useDashboardStore = defineStore('dashboard', {
     },
     historyPagination: {
       page: 1,
-      pageSize: 10,
+      pageSize: 5,
       total: 0
     },
     detailVisible: false,
@@ -160,7 +204,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.historyPagination.page = shouldResetPage
         ? 1
         : Number(params.page ?? this.historyPagination.page)
-      this.historyPagination.pageSize = Number(params.pageSize ?? this.historyPagination.pageSize)
+      this.historyPagination.pageSize = 5
 
       try {
         const requestParams = {
@@ -189,32 +233,17 @@ export const useDashboardStore = defineStore('dashboard', {
     changeHistoryPage(page) {
       this.loadHistory({ page })
     },
-    changeHistoryPageSize(pageSize) {
-      this.loadHistory({ page: 1, pageSize })
-    },
     async openDetail(recordId) {
       this.detailVisible = true
       this.detailLoading = true
       try {
         const { data } = await fetchInspectionDetail(recordId)
-        this.detailRecord = {
-          ...data,
-          operator: normalizeOperator(data?.operator),
-          createdAt: formatDateOnly(data?.createdAt),
-          inspectionTime: formatDateOnly(data?.inspectionTime),
-          videoUrl: normalizeAssetUrl(data?.videoUrl),
-          anomalies: Array.isArray(data?.anomalies)
-            ? data.anomalies.map((item) => ({
-                ...item,
-                imageUrl: normalizeAssetUrl(item?.imageUrl)
-              }))
-            : []
-        }
+        this.detailRecord = normalizeDetailRecord(data)
       } catch (_error) {
-        this.detailRecord = {
+        this.detailRecord = normalizeDetailRecord({
           ...mockDetail,
           id: recordId
-        }
+        })
       } finally {
         this.detailLoading = false
       }

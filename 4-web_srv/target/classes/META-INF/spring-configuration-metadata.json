@@ -30,8 +30,7 @@
     {
       "name": "app.jwt.expiration-seconds",
       "type": "java.lang.Long",
-      "sourceType": "com.hitzri.pipelinerobot.config.JwtProperties",
-      "defaultValue": 0
+      "sourceType": "com.hitzri.pipelinerobot.config.JwtProperties"
     },
     {
       "name": "app.jwt.secret",

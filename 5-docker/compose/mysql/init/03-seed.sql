@@ -11,16 +11,16 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO inspection_record (id, mode, environment, operator_name, result_summary, video_path, inspection_time, created_at)
 VALUES
-  (1, 'AUTO', 'dry', 'admin', 'Routine scan completed with joint crack found', 'videos/inspection-2026-03-20-01.mp4', '2026-03-20 09:12:00', '2026-03-20 09:15:00'),
-  (2, 'MANUAL', 'humid', 'admin', 'Manual follow-up completed with wall seepage observed', 'videos/inspection-2026-03-19-02.mp4', '2026-03-19 14:05:00', '2026-03-19 14:10:00'),
-  (3, 'AUTO', 'waterlogged', 'admin', 'Auto patrol completed and sediment warning recorded', 'videos/inspection-2026-03-18-03.mp4', '2026-03-18 10:20:00', '2026-03-18 10:24:00'),
-  (4, 'MANUAL', 'dry', 'admin', 'Drive test completed without visible anomaly', 'videos/inspection-2026-03-17-04.mp4', '2026-03-17 16:10:00', '2026-03-17 16:14:00'),
-  (5, 'AUTO', 'humid', 'admin', 'Routine scan completed with corrosion marks', 'videos/inspection-2026-03-16-05.mp4', '2026-03-16 11:32:00', '2026-03-16 11:36:00'),
-  (6, 'MANUAL', 'dry', 'admin', 'Manual inspection completed and cable tension normal', 'videos/inspection-2026-03-15-06.mp4', '2026-03-15 13:08:00', '2026-03-15 13:12:00'),
-  (7, 'AUTO', 'waterlogged', 'admin', 'Auto patrol completed with standing water noted', 'videos/inspection-2026-03-14-07.mp4', '2026-03-14 09:48:00', '2026-03-14 09:53:00'),
-  (8, 'MANUAL', 'humid', 'admin', 'Manual inspection completed without abnormal image capture', 'videos/inspection-2026-03-13-08.mp4', '2026-03-13 15:40:00', '2026-03-13 15:43:00'),
-  (9, 'AUTO', 'dry', 'admin', 'Routine scan completed with minor offset at hanger section', 'videos/inspection-2026-03-12-09.mp4', '2026-03-12 10:55:00', '2026-03-12 10:59:00'),
-  (10, 'MANUAL', 'waterlogged', 'admin', 'Manual verification completed and no secondary defect found', 'videos/inspection-2026-03-11-10.mp4', '2026-03-11 17:22:00', '2026-03-11 17:27:00')
+  (1, '1', '0', 'admin', '1', 'videos/inspection-2026-03-20-01.mp4', '2026-03-20 09:12:00', '2026-03-20 09:15:00'),
+  (2, '0', '1', 'admin', '2', 'videos/inspection-2026-03-19-02.mp4', '2026-03-19 14:05:00', '2026-03-19 14:10:00'),
+  (3, '1', '1', 'admin', '2', 'videos/inspection-2026-03-18-03.mp4', '2026-03-18 10:20:00', '2026-03-18 10:24:00'),
+  (4, '0', '0', 'admin', '0', 'videos/inspection-2026-03-17-04.mp4', '2026-03-17 16:10:00', '2026-03-17 16:14:00'),
+  (5, '1', '0', 'admin', '1', 'videos/inspection-2026-03-16-05.mp4', '2026-03-16 11:32:00', '2026-03-16 11:36:00'),
+  (6, '0', '0', 'admin', '0', 'videos/inspection-2026-03-15-06.mp4', '2026-03-15 13:08:00', '2026-03-15 13:12:00'),
+  (7, '1', '1', 'admin', '2', 'videos/inspection-2026-03-14-07.mp4', '2026-03-14 09:48:00', '2026-03-14 09:53:00'),
+  (8, '0', '1', 'admin', '0', 'videos/inspection-2026-03-13-08.mp4', '2026-03-13 15:40:00', '2026-03-13 15:43:00'),
+  (9, '1', '0', 'admin', '1', 'videos/inspection-2026-03-12-09.mp4', '2026-03-12 10:55:00', '2026-03-12 10:59:00'),
+  (10, '0', '1', 'admin', '0', 'videos/inspection-2026-03-11-10.mp4', '2026-03-11 17:22:00', '2026-03-11 17:27:00')
 ON DUPLICATE KEY UPDATE
   mode = VALUES(mode),
   environment = VALUES(environment),
@@ -32,12 +32,12 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO inspection_anomaly_image (id, inspection_id, image_path, anomaly_type, remark, captured_at)
 VALUES
-  (1, 1, 'images/anomaly-202603-01.jpg', 'joint_crack', 'Crack detected at the upper joint section.', '2026-03-20 09:13:00'),
-  (2, 1, 'images/anomaly-202603-02.jpg', 'joint_crack', 'Secondary close-up confirming edge fracture.', '2026-03-20 09:13:30'),
-  (3, 2, 'images/anomaly-202603-03.jpg', 'wall_seepage', 'Moisture streak visible along the right wall.', '2026-03-19 14:06:00'),
-  (4, 3, 'images/anomaly-202603-04.jpg', 'sediment', 'Sediment buildup observed near the trench bottom.', '2026-03-18 10:21:00'),
-  (5, 5, 'images/anomaly-202603-05.jpg', 'corrosion', 'Corrosion spot detected on metal support.', '2026-03-16 11:33:00'),
-  (6, 9, 'images/anomaly-202603-06.jpg', 'hanger_offset', 'Hanger alignment offset requires review.', '2026-03-12 10:56:00')
+  (1, 1, 'images/anomaly-202603-01.jpg', '1', '管壁上方出现连续裂缝痕迹。', '2026-03-20 09:13:00'),
+  (2, 1, 'images/anomaly-202603-02.jpg', '1', '裂缝细节复核图像。', '2026-03-20 09:13:30'),
+  (3, 2, 'images/anomaly-202603-03.jpg', '2', '满水段底部存在明显淤泥堆积。', '2026-03-19 14:06:00'),
+  (4, 3, 'images/anomaly-202603-04.jpg', '2', '淤泥厚度接近预警阈值。', '2026-03-18 10:21:00'),
+  (5, 5, 'images/anomaly-202603-05.jpg', '1', '非满水段支护附近发现裂缝。', '2026-03-16 11:33:00'),
+  (6, 9, 'images/anomaly-202603-06.jpg', '1', '巡检末段发现轻微裂缝迹象。', '2026-03-12 10:56:00')
 ON DUPLICATE KEY UPDATE
   inspection_id = VALUES(inspection_id),
   image_path = VALUES(image_path),
