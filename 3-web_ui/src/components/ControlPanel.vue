@@ -1,18 +1,35 @@
 ﻿<template>
   <section class="control-layout">
     <div class="mode-switch">
-      <button :class="['mode-btn', { active: patrolMode === 'auto' }]" @click="publishPatrolMode('auto')">自动巡检</button>
-      <button :class="['mode-btn', { active: patrolMode === 'manual' }]" @click="publishPatrolMode('manual')">人工巡检</button>
+      <button :class="['mode-btn', { active: patrolMode === 'auto' }]" @click="setPatrolMode('auto')">自动巡检</button>
+      <button :class="['mode-btn', { active: patrolMode === 'manual' }]" @click="setPatrolMode('manual')">人工巡检</button>
     </div>
 
     <div class="main-stage">
       <div class="motion-actions">
-        <button class="action-btn" @mousedown="publishMoveCommand('FORWARD')" @click="publishMoveCommand('FORWARD')">
-          <span>▶</span>
+        <button
+          class="action-btn"
+          :disabled="patrolMode !== 'manual'"
+          @mousedown="toggleMove('forward', true)"
+          @mouseup="toggleMove('forward', false)"
+          @mouseleave="toggleMove('forward', false)"
+          @touchstart.prevent="toggleMove('forward', true)"
+          @touchend.prevent="toggleMove('forward', false)"
+        >
+          <span>▲</span>
           <strong>前进</strong>
         </button>
-        <button class="action-btn secondary" @mousedown="publishMoveCommand('BACKWARD')" @click="publishMoveCommand('BACKWARD')">
-          <span>◀</span>
+
+        <button
+          class="action-btn secondary"
+          :disabled="patrolMode !== 'manual'"
+          @mousedown="toggleMove('reverse', true)"
+          @mouseup="toggleMove('reverse', false)"
+          @mouseleave="toggleMove('reverse', false)"
+          @touchstart.prevent="toggleMove('reverse', true)"
+          @touchend.prevent="toggleMove('reverse', false)"
+        >
+          <span>▼</span>
           <strong>后退</strong>
         </button>
       </div>
@@ -22,34 +39,79 @@
       </div>
 
       <div class="metrics">
-        <MetricCard icon="℃" label="设备温度" :value="formatValue(temperature, 0)" unit="°C" />
-        <MetricCard icon="▤" label="淤泥厚度" :value="formatValue(sludgeThickness, 0)" unit="cm" />
+        <MetricCard icon="℃" label="设备温度" :value="formatValue(temperature, 1)" unit="°C" />
+        <MetricCard icon="m" label="当前位置" :value="formatValue(travelMeters, 2)" unit="m" />
+        <MetricCard icon="--" label="淤泥厚度" value="--" unit="待接入" />
+      </div>
+    </div>
+
+    <div class="state-bar">
+      <div class="pill">
+        <span>电机</span>
+        <strong>{{ motorEnabled ? '运行中' : '已停止' }}</strong>
+      </div>
+      <div class="pill">
+        <span>方向</span>
+        <strong>{{ directionLabel }}</strong>
+      </div>
+      <div class="pill">
+        <span>编码器</span>
+        <strong>{{ encoderCount }}</strong>
+      </div>
+      <div class="pill">
+        <span>进水状态</span>
+        <strong>{{ waterDetected ? '已入水' : '未入水' }}</strong>
+      </div>
+      <div class="pill action-pill">
+        <el-button type="success" plain @click="startAutoInspection">开始自动巡检</el-button>
+        <el-button type="success" plain @click="markDetectDone">检测完成</el-button>
       </div>
     </div>
   </section>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import MetricCard from './MetricCard.vue'
 import PipeThreeScene from './PipeThreeScene.vue'
 import { formatValue } from '../utils/format'
 
-defineProps({
+const props = defineProps({
   patrolMode: String,
   temperature: Number,
-  sludgeThickness: Number,
-  publishPatrolMode: Function,
-  publishMoveCommand: Function
+  travelMeters: Number,
+  motorEnabled: Boolean,
+  motorRunState: Number,
+  encoderCount: Number,
+  waterDetected: Boolean,
+  setPatrolMode: Function,
+  publishMoveCommand: Function,
+  startAutoInspection: Function,
+  markDetectDone: Function
 })
+
+const directionLabel = computed(() => {
+  if (props.motorRunState === 1) {
+    return '前进'
+  }
+  if (props.motorRunState === -1) {
+    return '后退'
+  }
+  return '停止'
+})
+
+function toggleMove(direction, active) {
+  props.publishMoveCommand?.(direction, active)
+}
 </script>
 
 <style scoped>
 .control-layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 16px;
-  min-height: 470px;
+  min-height: 100%;
 }
+
 .mode-switch {
   display: inline-flex;
   width: fit-content;
@@ -58,59 +120,140 @@ defineProps({
   border-radius: 999px;
   background: rgba(11, 23, 38, 0.7);
 }
+
 .mode-btn {
-  min-width: 104px;
-  height: 34px;
+  min-width: 112px;
+  height: 36px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-dim);
   cursor: pointer;
   transition: all 0.2s ease;
 }
+
 .mode-btn.active {
   background: linear-gradient(135deg, #88f1ba, #60f2df);
   color: #06211d;
   font-weight: 700;
 }
+
 .main-stage {
   display: grid;
-  grid-template-columns: 84px 1fr 170px;
-  align-items: center;
+  grid-template-columns: 92px minmax(0, 1fr) 200px;
   gap: 18px;
-  min-height: 410px;
+  align-items: stretch;
+  min-height: 420px;
 }
+
 .motion-actions {
   display: grid;
+  align-content: center;
   gap: 16px;
 }
+
 .action-btn {
   display: grid;
   place-items: center;
   gap: 4px;
-  width: 70px;
-  height: 70px;
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
   border: 1px solid rgba(106, 236, 194, 0.28);
   background: radial-gradient(circle at 30% 30%, rgba(135, 244, 190, 0.34), rgba(9, 25, 38, 0.95));
   color: var(--brand);
   cursor: pointer;
 }
+
+.action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .action-btn.secondary {
   color: #9ab7db;
 }
+
 .action-btn span {
   font-size: 24px;
 }
+
 .action-btn strong {
-  font-size: 18px;
+  font-size: 16px;
 }
+
 .pipe-scene {
-  height: 360px;
+  min-height: 360px;
   background: linear-gradient(180deg, rgba(6, 19, 26, 0.12), rgba(41, 139, 103, 0.06));
 }
+
 .metrics {
   display: grid;
-  gap: 26px;
+  gap: 22px;
+  align-content: center;
+}
+
+.state-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pill {
+  min-height: 84px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 12px 14px;
+  background: rgba(9, 22, 36, 0.7);
+  border: 1px solid rgba(103, 212, 255, 0.08);
+}
+
+.pill span {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.pill strong {
+  font-size: 18px;
+}
+
+.action-pill {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 1440px) {
+  .main-stage {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .metrics {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .state-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .action-pill {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .main-stage,
+  .state-bar,
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .motion-actions {
+    grid-auto-flow: column;
+    justify-content: start;
+  }
 }
 </style>

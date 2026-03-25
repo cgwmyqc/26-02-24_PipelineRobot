@@ -9,17 +9,30 @@ export function useRosDashboard() {
   const { patrolMode } = storeToRefs(store)
   const unsubscribers = []
 
-  function publishPatrolMode(mode) {
-    store.setPatrolMode(mode)
-    rosService.publish(appConfig.topics.patrolMode, {
-      data: mode === 'auto' ? 'AUTO' : 'MANUAL'
+  function publishManualMode(isManual) {
+    rosService.publish(appConfig.topics.manualModeCommand, {
+      data: isManual
     })
   }
 
-  function publishMoveCommand(command) {
-    rosService.publish(appConfig.topics.move, {
-      data: command
-    })
+  function setPatrolMode(mode) {
+    publishManualMode(mode === 'manual')
+  }
+
+  function publishMoveCommand(direction, active) {
+    const topic = direction === 'forward'
+      ? appConfig.topics.manualForwardCommand
+      : appConfig.topics.manualReverseCommand
+
+    rosService.publish(topic, { data: active })
+  }
+
+  function startAutoInspection() {
+    rosService.publish(appConfig.topics.startAuto, { data: true })
+  }
+
+  function markDetectDone() {
+    rosService.publish(appConfig.topics.detectDone, { data: true })
   }
 
   onMounted(() => {
@@ -31,13 +44,55 @@ export function useRosDashboard() {
 
     unsubscribers.push(
       rosService.subscribe(appConfig.topics.temperature, (message) => {
-        store.updateMetric('temperature', message.data)
+        store.updateRosMetric('temperature', message.data)
       })
     )
 
     unsubscribers.push(
-      rosService.subscribe(appConfig.topics.sludgeThickness, (message) => {
-        store.updateMetric('sludgeThickness', message.data)
+      rosService.subscribe(appConfig.topics.humidity, (message) => {
+        store.updateRosMetric('humidity', message.data)
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.waterSensor, (message) => {
+        store.updateRosMetric('waterDetected', Boolean(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.manualModeState, (message) => {
+        store.setPatrolModeByState(Boolean(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.motorEnable, (message) => {
+        store.updateRosMetric('motorEnabled', Boolean(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.motorRunState, (message) => {
+        store.updateRosMetric('motorRunState', Number(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.encoderCount, (message) => {
+        store.updateRosMetric('encoderCount', Number(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.travelMeters, (message) => {
+        store.updateRosMetric('travelMeters', Number(message.data))
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.motionReached, (message) => {
+        store.updateRosMetric('motionReached', Boolean(message.data))
       })
     )
 
@@ -71,7 +126,9 @@ export function useRosDashboard() {
 
   return {
     patrolMode,
-    publishPatrolMode,
-    publishMoveCommand
+    setPatrolMode,
+    publishMoveCommand,
+    startAutoInspection,
+    markDetectDone
   }
 }

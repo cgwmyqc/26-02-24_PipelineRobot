@@ -2,7 +2,7 @@
   <section class="panel video-panel">
     <div class="panel-title">视频数据</div>
     <div class="panel-body video-body">
-      <img v-if="frameSrc" :src="frameSrc" alt="视频流" class="video-image" />
+      <img v-if="frameSrc" :src="frameSrc" alt="实时视频流" class="video-image" />
       <div v-else class="video-placeholder">
         <div class="play-button">▶</div>
         <span>等待 ROS 视频流接入</span>
@@ -39,22 +39,26 @@ const frameSrc = computed(() => {
 
 <style scoped>
 .video-panel {
-  min-height: 360px;
+  min-height: 400px;
 }
+
 .video-body {
   position: relative;
   padding: 12px;
 }
+
 .video-image,
 .video-placeholder {
   width: 100%;
-  height: 320px;
+  min-height: 340px;
   border: 1px solid rgba(103, 212, 255, 0.12);
 }
+
 .video-image {
   object-fit: cover;
   background: #091522;
 }
+
 .video-placeholder {
   display: grid;
   place-items: center;
@@ -62,8 +66,9 @@ const frameSrc = computed(() => {
   background:
     linear-gradient(180deg, rgba(31, 74, 110, 0.2), rgba(6, 15, 26, 0.85)),
     radial-gradient(circle at 50% 50%, rgba(120, 207, 255, 0.18), transparent 24%);
-  color: var(--text-muted);
+  color: var(--text-dim);
 }
+
 .play-button {
   display: grid;
   place-items: center;
@@ -75,6 +80,7 @@ const frameSrc = computed(() => {
   font-size: 34px;
   box-shadow: 0 0 30px rgba(117, 240, 194, 0.3);
 }
+
 .video-status {
   position: absolute;
   right: 22px;

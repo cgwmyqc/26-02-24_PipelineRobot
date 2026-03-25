@@ -76,3 +76,42 @@ E:\QT5\5.12.12\5.12.12\msvc2017_64\bin\windeployqt.exe 7-sonarDemo.exe
 ![](.\Asset\1.png)
 
 8、拷贝完成后就可以点击运行按钮运行工程了
+
+
+
+# 数据库
+账户：root
+密码：空
+
+账户：dev
+密码：123456
+
+创建dev账户：
+```docker exec -it pipeline_robot_mysql mysql -uroot -p```
+
+查看用户权限：
+
+```SELECT user, host FROM mysql.user;```
+
+```
+
+mysql> SELECT user, host FROM mysql.user;
++------------------+-----------+
+| user             | host      |
++------------------+-----------+
+| root             | %         |
+| mysql.infoschema | localhost |
+| mysql.session    | localhost |
+| mysql.sys        | localhost |
+| root             | localhost |
++------------------+-----------+
+
+```
+
+会发现root账户既有localhost访问权限又有远程访问权限%就可以，若root没有远程访问权限，需要创建一个dev账户添加远程访问权限。
+
+
+
+
+
+注意：使用root账户默认时不允许远程访问的，所以要使用命令行先进入docker内的Mysql，然后创建一个dev账户。由于windows已经安装有mysql 3306端口占用了，所以用3307端口转发到docker的3306端口。

@@ -1,4 +1,4 @@
-services:
+﻿services:
   micro_ros_agent:
     image: microros/micro-ros-agent:humble
     container_name: micro_ros_agent
@@ -6,3 +6,30 @@ services:
     ports:
       - "8888:8888/udp"
     command: udp4 --port 8888 -v6
+
+  mysql:
+    image: mysql:8.0
+    container_name: pipeline_robot_mysql
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: pipeline_robot
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  mysql_data:

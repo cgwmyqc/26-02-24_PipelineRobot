@@ -206,6 +206,8 @@ SemaphoreHandle_t ctrl_state_mutex = NULL;
 volatile bool g_auto_enable_cmd = false;
 volatile bool g_auto_forward_cmd = false;
 volatile bool g_auto_reverse_cmd = false;
+volatile bool g_remote_manual_mode_pending = false;
+volatile bool g_remote_manual_mode_value = false;
 
 // ------------------------------------------------------------
 // 编码器相关全局变量
@@ -260,6 +262,9 @@ rcl_publisher_t travel_m_pub;
 // ------------------------------------------------------------
 rcl_subscription_t start_auto_sub;
 rcl_subscription_t detect_done_sub;
+rcl_subscription_t set_manual_mode_sub;
+rcl_subscription_t manual_forward_cmd_sub;
+rcl_subscription_t manual_reverse_cmd_sub;
 
 // ------------------------------------------------------------
 // msgs
@@ -276,6 +281,9 @@ std_msgs__msg__Float32 travel_m_msg;
 // subscriber msg buffer
 std_msgs__msg__Bool start_auto_msg;
 std_msgs__msg__Bool detect_done_msg;
+std_msgs__msg__Bool set_manual_mode_msg;
+std_msgs__msg__Bool manual_forward_cmd_msg;
+std_msgs__msg__Bool manual_reverse_cmd_msg;
 
 // ============================================================
 // UDP 对象
@@ -305,6 +313,9 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
 
 void start_auto_callback(const void *msgin);
 void detect_done_callback(const void *msgin);
+void set_manual_mode_callback(const void *msgin);
+void manual_forward_cmd_callback(const void *msgin);
+void manual_reverse_cmd_callback(const void *msgin);
 
 bool debounce_update(DebounceInput_t *db, bool raw, uint32_t now_ms);
 bool debounce_rising_edge(DebounceInput_t *db);
@@ -489,6 +500,27 @@ void detect_done_callback(const void *msgin)
     g_detect_done_cmd = true;
     Serial.println("[ROS] recv detect_done = true");
   }
+}
+
+void set_manual_mode_callback(const void *msgin)
+{
+  const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  g_remote_manual_mode_value = msg->data;
+  g_remote_manual_mode_pending = true;
+  Serial.print("[ROS] recv set_manual_mode = ");
+  Serial.println(msg->data ? "MANUAL" : "AUTO");
+}
+
+void manual_forward_cmd_callback(const void *msgin)
+{
+  const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  g_auto_forward_cmd = msg->data;
+}
+
+void manual_reverse_cmd_callback(const void *msgin)
+{
+  const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  g_auto_reverse_cmd = msg->data;
 }
 
 // ============================================================
@@ -769,6 +801,9 @@ bool create_microros_entities()
 
   start_auto_sub = rcl_get_zero_initialized_subscription();
   detect_done_sub = rcl_get_zero_initialized_subscription();
+  set_manual_mode_sub = rcl_get_zero_initialized_subscription();
+  manual_forward_cmd_sub = rcl_get_zero_initialized_subscription();
+  manual_reverse_cmd_sub = rcl_get_zero_initialized_subscription();
 
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
   RCCHECK(rclc_node_init_default(&node, "esp32_fixed_controller_node", "", &support));
@@ -839,10 +874,28 @@ bool create_microros_entities()
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/detect_done"));
 
+  RCCHECK(rclc_subscription_init_default(
+      &set_manual_mode_sub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+      "/fixed_controller/set_manual_mode"));
+
+  RCCHECK(rclc_subscription_init_default(
+      &manual_forward_cmd_sub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+      "/fixed_controller/manual_forward_cmd"));
+
+  RCCHECK(rclc_subscription_init_default(
+      &manual_reverse_cmd_sub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+      "/fixed_controller/manual_reverse_cmd"));
+
   // ----------------------------------------------------------
   // executor
   // ----------------------------------------------------------
-  RCCHECK(rclc_executor_init(&executor, &support.context, 2, &allocator));
+  RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
 
   RCCHECK(rclc_executor_add_subscription(
       &executor,
@@ -856,6 +909,27 @@ bool create_microros_entities()
       &detect_done_sub,
       &detect_done_msg,
       &detect_done_callback,
+      ON_NEW_DATA));
+
+  RCCHECK(rclc_executor_add_subscription(
+      &executor,
+      &set_manual_mode_sub,
+      &set_manual_mode_msg,
+      &set_manual_mode_callback,
+      ON_NEW_DATA));
+
+  RCCHECK(rclc_executor_add_subscription(
+      &executor,
+      &manual_forward_cmd_sub,
+      &manual_forward_cmd_msg,
+      &manual_forward_cmd_callback,
+      ON_NEW_DATA));
+
+  RCCHECK(rclc_executor_add_subscription(
+      &executor,
+      &manual_reverse_cmd_sub,
+      &manual_reverse_cmd_msg,
+      &manual_reverse_cmd_callback,
       ON_NEW_DATA));
 
   Serial.println("[micro-ROS] create node/pubs/subs ok");
@@ -927,6 +1001,24 @@ void destroy_microros_entities()
   {
     RCSOFTCHECK(rcl_subscription_fini(&detect_done_sub, &node));
     detect_done_sub = rcl_get_zero_initialized_subscription();
+  }
+
+  if (set_manual_mode_sub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_subscription_fini(&set_manual_mode_sub, &node));
+    set_manual_mode_sub = rcl_get_zero_initialized_subscription();
+  }
+
+  if (manual_forward_cmd_sub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_subscription_fini(&manual_forward_cmd_sub, &node));
+    manual_forward_cmd_sub = rcl_get_zero_initialized_subscription();
+  }
+
+  if (manual_reverse_cmd_sub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_subscription_fini(&manual_reverse_cmd_sub, &node));
+    manual_reverse_cmd_sub = rcl_get_zero_initialized_subscription();
   }
 
   RCSOFTCHECK(rclc_executor_fini(&executor));
@@ -1020,13 +1112,37 @@ void io_control_task(void *parameter)
     // 2) 模式输出 GPIO15
     // LOW=自动，HIGH=手动
     // --------------------------------------------------------
+    if (g_remote_manual_mode_pending)
+    {
+      local_state.manual_mode = g_remote_manual_mode_value;
+      g_remote_manual_mode_pending = false;
+
+      if (local_state.manual_mode)
+      {
+        g_auto_task_active = false;
+        g_auto_state = AUTO_IDLE;
+        g_start_auto_cmd = false;
+        g_detect_done_cmd = false;
+      }
+      else
+      {
+        g_auto_forward_cmd = false;
+        g_auto_reverse_cmd = false;
+      }
+    }
+
     digitalWrite(MODE_OUT_PIN, local_state.manual_mode ? HIGH : LOW);
 
     // --------------------------------------------------------
     // 3) 更新按钮状态（用消抖后的稳定值）
     // --------------------------------------------------------
-    local_state.btn_forward = btn_fwd_stable;
-    local_state.btn_reverse = btn_rev_stable;
+    const bool remote_forward_active = local_state.manual_mode && g_auto_forward_cmd;
+    const bool remote_reverse_active = local_state.manual_mode && g_auto_reverse_cmd;
+    const bool merged_forward = btn_fwd_stable || remote_forward_active;
+    const bool merged_reverse = btn_rev_stable || remote_reverse_active;
+
+    local_state.btn_forward = merged_forward;
+    local_state.btn_reverse = merged_reverse;
 
     // --------------------------------------------------------
     // 4) 计算电机命令
@@ -1037,12 +1153,12 @@ void io_control_task(void *parameter)
     if (local_state.manual_mode)
     {
       // 手动模式：按钮控制
-      if (btn_fwd_stable && !btn_rev_stable)
+      if (merged_forward && !merged_reverse)
       {
         motor_enable = true;
         motor_run = MOTOR_FORWARD;
       }
-      else if (!btn_fwd_stable && btn_rev_stable)
+      else if (!merged_forward && merged_reverse)
       {
         motor_enable = true;
         motor_run = MOTOR_REVERSE;
