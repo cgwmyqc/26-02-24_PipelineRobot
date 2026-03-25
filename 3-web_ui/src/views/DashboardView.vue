@@ -36,7 +36,6 @@
             :initial-filters="historyFilters"
             @search="loadHistory"
             @page-change="changeHistoryPage"
-            @size-change="changeHistoryPageSize"
             @detail="openDetail"
             @export="exportRecord"
           />
@@ -104,7 +103,7 @@ const {
 } = storeToRefs(store)
 
 const { setPatrolMode, publishMoveCommand, startAutoInspection, markDetectDone } = useRosDashboard()
-const { loadHistory, changeHistoryPage, changeHistoryPageSize, openDetail, closeDetail, exportRecord } = store
+const { loadHistory, changeHistoryPage, openDetail, closeDetail, exportRecord } = store
 
 function handleLogout() {
   authStore.logout()
