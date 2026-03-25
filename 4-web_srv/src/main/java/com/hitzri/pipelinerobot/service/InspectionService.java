@@ -58,11 +58,13 @@ public class InspectionService {
         long page,
         long pageSize
     ) {
+        LocalDateTime startTime = parseStartTime(startDate);
+        LocalDateTime endTime = parseEndTime(endDate);
         LambdaQueryWrapper<InspectionRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.like(StringUtils.hasText(mode), InspectionRecord::getMode, mode)
             .like(StringUtils.hasText(environment), InspectionRecord::getEnvironment, environment)
-            .ge(StringUtils.hasText(startDate), InspectionRecord::getInspectionTime, parseStartTime(startDate))
-            .le(StringUtils.hasText(endDate), InspectionRecord::getInspectionTime, parseEndTime(endDate))
+            .ge(startTime != null, InspectionRecord::getInspectionTime, startTime)
+            .le(endTime != null, InspectionRecord::getInspectionTime, endTime)
             .orderByDesc(InspectionRecord::getCreatedAt);
 
         Page<InspectionRecord> pageResult = inspectionRecordMapper.selectPage(new Page<>(page, pageSize), wrapper);
@@ -169,10 +171,16 @@ public class InspectionService {
     }
 
     private LocalDateTime parseStartTime(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
         return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
     }
 
     private LocalDateTime parseEndTime(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
         return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE).atTime(LocalTime.MAX);
     }
 }

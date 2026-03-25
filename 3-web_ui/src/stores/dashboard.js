@@ -145,10 +145,22 @@ export const useDashboardStore = defineStore('dashboard', {
     },
     async loadHistory(params = {}) {
       this.historyLoading = true
+      const shouldResetPage = Object.prototype.hasOwnProperty.call(params, 'mode')
+        || Object.prototype.hasOwnProperty.call(params, 'environment')
+        || Object.prototype.hasOwnProperty.call(params, 'startDate')
+        || Object.prototype.hasOwnProperty.call(params, 'endDate')
+
       this.historyFilters = {
         ...this.historyFilters,
-        ...params
+        mode: params.mode ?? this.historyFilters.mode,
+        environment: params.environment ?? this.historyFilters.environment,
+        startDate: params.startDate ?? this.historyFilters.startDate,
+        endDate: params.endDate ?? this.historyFilters.endDate
       }
+      this.historyPagination.page = shouldResetPage
+        ? 1
+        : Number(params.page ?? this.historyPagination.page)
+      this.historyPagination.pageSize = Number(params.pageSize ?? this.historyPagination.pageSize)
 
       try {
         const requestParams = {
@@ -173,6 +185,12 @@ export const useDashboardStore = defineStore('dashboard', {
       } finally {
         this.historyLoading = false
       }
+    },
+    changeHistoryPage(page) {
+      this.loadHistory({ page })
+    },
+    changeHistoryPageSize(pageSize) {
+      this.loadHistory({ page: 1, pageSize })
     },
     async openDetail(recordId) {
       this.detailVisible = true
