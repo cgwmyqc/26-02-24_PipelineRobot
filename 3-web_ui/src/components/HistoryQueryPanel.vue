@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="panel history-panel">
     <div class="panel-title">历史查询</div>
     <div class="panel-body history-body">
@@ -11,13 +11,22 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item>
-          <el-input v-model="filters.environment" placeholder="管道环境" clearable />
+          <el-date-picker
+            v-model="filters.startDate"
+            class="date-picker"
+            type="date"
+            placeholder="开始日期"
+            value-format="YYYY-MM-DD"
+          />
         </el-form-item>
         <el-form-item>
-          <el-date-picker v-model="filters.startDate" type="date" placeholder="开始日期" value-format="YYYY-MM-DD" />
-        </el-form-item>
-        <el-form-item>
-          <el-date-picker v-model="filters.endDate" type="date" placeholder="结束日期" value-format="YYYY-MM-DD" />
+          <el-date-picker
+            v-model="filters.endDate"
+            class="date-picker"
+            type="date"
+            placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+          />
         </el-form-item>
         <el-form-item>
           <el-button type="success" @click="handleSearch">查询</el-button>
@@ -28,13 +37,15 @@
         <el-table-column type="index" label="序号" width="62" />
         <el-table-column prop="mode" label="巡检方式" width="100" />
         <el-table-column prop="environment" label="管道环境" width="120" />
-        <el-table-column prop="operator" label="操作人" width="130" />
+        <el-table-column prop="operator" label="操作人" width="110" />
         <el-table-column prop="result" label="分析结果" min-width="120" />
-        <el-table-column prop="createdAt" label="创建日期" width="180" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column prop="createdAt" label="创建日期" width="116" />
+        <el-table-column label="操作" width="170">
           <template #default="{ row }">
-            <el-button link type="success" @click="$emit('detail', row.id)">详情</el-button>
-            <el-button link type="success" :loading="exportingId === row.id" @click="$emit('export', row.id)">导出</el-button>
+            <div class="action-group">
+              <el-button link type="success" @click="$emit('detail', row.id)">详情</el-button>
+              <el-button link type="success" :loading="exportingId === row.id" @click="$emit('export', row.id)">导出</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -94,6 +105,7 @@ function handleSearch() {
 <style scoped>
 .history-panel {
   min-height: 420px;
+  height: 100%;
 }
 
 .history-body {
@@ -112,8 +124,19 @@ function handleSearch() {
   width: 100%;
 }
 
+.action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 :deep(.el-form-item) {
   margin-bottom: 10px;
+}
+
+:deep(.date-picker) {
+  width: 154px;
 }
 
 :deep(.el-radio) {

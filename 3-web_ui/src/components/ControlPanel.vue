@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <section class="control-layout">
     <div class="mode-switch">
       <button :class="['mode-btn', { active: patrolMode === 'auto' }]" @click="setPatrolMode('auto')">自动巡检</button>
@@ -32,6 +32,11 @@
           <span>▼</span>
           <strong>后退</strong>
         </button>
+
+        <button class="action-btn launch-btn" @click="startAutoInspection">
+          <span>◎</span>
+          <strong>开始自动</strong>
+        </button>
       </div>
 
       <div class="pipe-scene">
@@ -62,9 +67,9 @@
         <span>进水状态</span>
         <strong>{{ waterDetected ? '已入水' : '未入水' }}</strong>
       </div>
-      <div class="pill action-pill">
-        <el-button type="success" plain @click="startAutoInspection">开始自动巡检</el-button>
-        <el-button type="success" plain @click="markDetectDone">检测完成</el-button>
+      <div class="pill">
+        <span>检测状态</span>
+        <strong>{{ motionReached ? '已完成' : '待完成' }}</strong>
       </div>
     </div>
   </section>
@@ -84,6 +89,7 @@ const props = defineProps({
   motorRunState: Number,
   encoderCount: Number,
   waterDetected: Boolean,
+  motionReached: Boolean,
   setPatrolMode: Function,
   publishMoveCommand: Function,
   startAutoInspection: Function,
@@ -174,12 +180,18 @@ function toggleMove(direction, active) {
   color: #9ab7db;
 }
 
+.launch-btn {
+  font-size: 12px;
+  line-height: 1.15;
+}
+
 .action-btn span {
   font-size: 24px;
 }
 
 .action-btn strong {
   font-size: 16px;
+  text-align: center;
 }
 
 .pipe-scene {
@@ -218,13 +230,6 @@ function toggleMove(direction, active) {
   font-size: 18px;
 }
 
-.action-pill {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: center;
-}
-
 @media (max-width: 1440px) {
   .main-stage {
     grid-template-columns: 92px minmax(0, 1fr);
@@ -237,10 +242,6 @@ function toggleMove(direction, active) {
 
   .state-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .action-pill {
-    grid-column: 1 / -1;
   }
 }
 

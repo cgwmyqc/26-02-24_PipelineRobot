@@ -9,8 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@floating-ui/dom": "1.7.6",
     "axios": "^1.8.4",
-    "element-plus": "^2.10.0",
+    "element-plus": "2.10.0",
     "pinia": "^3.0.1",
     "roslib": "^1.4.1",
     "three": "^0.176.0",
