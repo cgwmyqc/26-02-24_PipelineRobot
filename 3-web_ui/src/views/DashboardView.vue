@@ -30,8 +30,13 @@
             :list="historyList"
             :loading="historyLoading"
             :exporting-id="exportingId"
+            :page="historyPagination.page"
+            :page-size="historyPagination.pageSize"
+            :total="historyPagination.total"
             :initial-filters="historyFilters"
             @search="loadHistory"
+            @page-change="changeHistoryPage"
+            @size-change="changeHistoryPageSize"
             @detail="openDetail"
             @export="exportRecord"
           />
@@ -90,6 +95,7 @@ const {
   historyList,
   historyLoading,
   historyFilters,
+  historyPagination,
   detailVisible,
   detailLoading,
   detailRecord,
@@ -98,7 +104,7 @@ const {
 } = storeToRefs(store)
 
 const { setPatrolMode, publishMoveCommand, startAutoInspection, markDetectDone } = useRosDashboard()
-const { loadHistory, openDetail, closeDetail, exportRecord } = store
+const { loadHistory, changeHistoryPage, changeHistoryPageSize, openDetail, closeDetail, exportRecord } = store
 
 function handleLogout() {
   authStore.logout()
