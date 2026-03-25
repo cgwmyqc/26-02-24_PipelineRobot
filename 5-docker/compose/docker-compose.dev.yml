@@ -7,6 +7,21 @@
       - "8888:8888/udp"
     command: udp4 --port 8888 -v6
 
+  rosbridge:
+    image: osrf/ros:humble-desktop
+    container_name: pipeline_robot_rosbridge
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        apt-get update &&
+        apt-get install -y ros-humble-rosbridge-server &&
+        source /opt/ros/humble/setup.bash &&
+        ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090
+
   mysql:
     image: mysql:8.0
     container_name: pipeline_robot_mysql
