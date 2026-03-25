@@ -76,6 +76,20 @@ textarea {
   background: transparent;
 }
 
+.el-table__fixed,
+.el-table__fixed-right,
+.el-table__fixed-right-patch {
+  background: transparent !important;
+}
+
+.el-table__fixed th.el-table__cell,
+.el-table__fixed td.el-table__cell,
+.el-table__fixed-right th.el-table__cell,
+.el-table__fixed-right td.el-table__cell,
+.el-table__fixed-right-patch {
+  background: rgba(16, 31, 48, 0.96) !important;
+}
+
 .el-table {
   color: var(--text);
   --el-table-border-color: rgba(103, 212, 255, 0.08);

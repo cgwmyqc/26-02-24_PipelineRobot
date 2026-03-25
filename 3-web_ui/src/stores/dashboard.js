@@ -1,25 +1,49 @@
-﻿import { defineStore } from 'pinia'
+import { defineStore } from 'pinia'
 import { exportInspectionRecord, fetchInspectionDetail, fetchInspectionHistory } from '../api/history'
 import { appConfig } from '../config/app'
+
+function formatDateOnly(value) {
+  if (!value) {
+    return '--'
+  }
+  return String(value).trim().slice(0, 10)
+}
+
+function normalizeOperator(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) {
+    return '--'
+  }
+  return normalized === 'operator.admin' ? 'admin' : normalized
+}
+
+function normalizeHistoryRecord(record) {
+  return {
+    ...record,
+    operator: normalizeOperator(record?.operator),
+    createdAt: formatDateOnly(record?.createdAt),
+    inspectionTime: formatDateOnly(record?.inspectionTime)
+  }
+}
 
 const mockHistory = [
   {
     id: 1,
     mode: '自动巡检',
     environment: '满水环境',
-    operator: 'operator.admin',
+    operator: 'admin',
     result: '裂缝预警',
-    createdAt: '2026-03-20 10:30:00',
-    inspectionTime: '2026-03-20 10:28:00'
+    createdAt: '2026-03-20',
+    inspectionTime: '2026-03-20'
   },
   {
     id: 2,
     mode: '人工巡检',
     environment: '非满水环境',
-    operator: 'operator.admin',
+    operator: 'admin',
     result: '未发现异常',
-    createdAt: '2026-03-18 14:20:00',
-    inspectionTime: '2026-03-18 14:18:00'
+    createdAt: '2026-03-18',
+    inspectionTime: '2026-03-18'
   }
 ]
 
@@ -27,10 +51,10 @@ const mockDetail = {
   id: 1,
   mode: '自动巡检',
   environment: '满水环境',
-  operator: 'operator.admin',
+  operator: 'admin',
   result: '裂缝预警',
-  inspectionTime: '2026-03-20 10:28:00',
-  createdAt: '2026-03-20 10:30:00',
+  inspectionTime: '2026-03-20',
+  createdAt: '2026-03-20',
   videoUrl: '',
   anomalies: [
     {
@@ -141,10 +165,10 @@ export const useDashboardStore = defineStore('dashboard', {
               ? data
               : mockHistory
 
-        this.historyList = records
+        this.historyList = records.map(normalizeHistoryRecord)
         this.historyPagination.total = Number(data?.total ?? records.length)
       } catch (_error) {
-        this.historyList = mockHistory
+        this.historyList = mockHistory.map(normalizeHistoryRecord)
         this.historyPagination.total = mockHistory.length
       } finally {
         this.historyLoading = false
@@ -157,6 +181,9 @@ export const useDashboardStore = defineStore('dashboard', {
         const { data } = await fetchInspectionDetail(recordId)
         this.detailRecord = {
           ...data,
+          operator: normalizeOperator(data?.operator),
+          createdAt: formatDateOnly(data?.createdAt),
+          inspectionTime: formatDateOnly(data?.inspectionTime),
           videoUrl: normalizeAssetUrl(data?.videoUrl),
           anomalies: Array.isArray(data?.anomalies)
             ? data.anomalies.map((item) => ({
@@ -183,7 +210,7 @@ export const useDashboardStore = defineStore('dashboard', {
       try {
         const response = await exportInspectionRecord(recordId)
         const contentDisposition = response.headers['content-disposition'] || ''
-        const match = contentDisposition.match(/filename="?([^"]+)"?/) 
+        const match = contentDisposition.match(/filename="?([^"]+)"?/)
         const filename = match?.[1] || `inspection-${recordId}.zip`
         const blob = new Blob([response.data], { type: 'application/zip' })
         const url = window.URL.createObjectURL(blob)

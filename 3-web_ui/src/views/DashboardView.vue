@@ -15,6 +15,7 @@
               :motor-run-state="motorRunState"
               :encoder-count="encoderCount"
               :water-detected="waterDetected"
+              :motion-reached="motionReached"
               :set-patrol-mode="setPatrolMode"
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
@@ -24,7 +25,7 @@
         </div>
 
         <div class="secondary-grid">
-          <VideoPanel :frame="videoFrame" :connected="rosConnected" />
+          <AnalysisPanel />
           <HistoryQueryPanel
             :list="historyList"
             :loading="historyLoading"
@@ -38,7 +39,7 @@
       </section>
 
       <section class="dashboard-aside">
-        <AnalysisPanel />
+        <VideoPanel :frame="videoFrame" :connected="rosConnected" />
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
           <div class="panel-body">
@@ -83,6 +84,7 @@ const {
   motorRunState,
   encoderCount,
   waterDetected,
+  motionReached,
   rosConnected,
   videoFrame,
   historyList,
@@ -111,7 +113,7 @@ function handleLogout() {
 
 .dashboard-shell {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.8fr) minmax(360px, 1.1fr);
   gap: 16px;
   padding: 18px;
 }
@@ -123,6 +125,10 @@ function handleLogout() {
   gap: 16px;
 }
 
+.secondary-grid > * {
+  height: 100%;
+}
+
 .control-panel-shell {
   min-height: 620px;
 }
@@ -132,8 +138,8 @@ function handleLogout() {
 }
 
 .secondary-grid {
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  align-items: stretch;
 }
 
 .point-panel {
