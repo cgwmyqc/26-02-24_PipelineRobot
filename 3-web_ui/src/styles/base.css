@@ -3,6 +3,7 @@
   --panel-border: rgba(103, 212, 255, 0.18);
   --brand: #75f0c2;
   --text: #ecf7ff;
+  --text-dim: rgba(226, 241, 255, 0.72);
   --text-muted: rgba(226, 241, 255, 0.72);
 }
 
@@ -29,15 +30,9 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 58% 42%;
-  gap: 16px;
-  padding: 0 18px 18px;
 }
 
 .panel {
@@ -61,7 +56,7 @@ select {
 .panel-title {
   display: flex;
   align-items: center;
-  min-height: 42px;
+  min-height: 46px;
   padding: 0 18px;
   background: rgba(31, 45, 65, 0.9);
   border-bottom: 1px solid rgba(117, 240, 194, 0.08);
@@ -71,7 +66,7 @@ select {
 }
 
 .panel-body {
-  height: calc(100% - 42px);
+  height: calc(100% - 46px);
 }
 
 .el-table,
@@ -90,9 +85,26 @@ select {
 }
 
 .el-input__wrapper,
-.el-select__wrapper {
+.el-select__wrapper,
+.el-textarea__inner,
+.el-date-editor.el-input__wrapper {
   background: rgba(11, 23, 38, 0.9);
   box-shadow: 0 0 0 1px rgba(103, 212, 255, 0.08) inset;
+}
+
+.el-dialog {
+  background: linear-gradient(180deg, rgba(13, 26, 40, 0.98), rgba(8, 19, 32, 0.96));
+  border: 1px solid rgba(103, 212, 255, 0.16);
+}
+
+.el-dialog__header {
+  margin-right: 0;
+  border-bottom: 1px solid rgba(103, 212, 255, 0.08);
+}
+
+.el-dialog__title,
+.el-dialog__headerbtn .el-dialog__close {
+  color: var(--text);
 }
 
 .el-button--success {

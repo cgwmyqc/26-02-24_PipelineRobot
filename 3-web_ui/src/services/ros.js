@@ -5,25 +5,34 @@ class RosService {
   constructor() {
     this.ros = null
     this.topicCache = new Map()
+    this.handlersBound = false
   }
 
   connect({ onConnection, onClose, onError } = {}) {
-    if (this.ros) {
-      return this.ros
+    if (!this.ros) {
+      this.ros = new ROSLIB.Ros({
+        url: appConfig.rosbridgeUrl
+      })
     }
 
-    this.ros = new ROSLIB.Ros({
-      url: appConfig.rosbridgeUrl
-    })
-
-    this.ros.on('connection', () => onConnection?.())
-    this.ros.on('close', () => onClose?.())
-    this.ros.on('error', (error) => onError?.(error))
+    if (!this.handlersBound) {
+      this.ros.on('connection', () => onConnection?.())
+      this.ros.on('close', () => onClose?.())
+      this.ros.on('error', (error) => onError?.(error))
+      this.handlersBound = true
+    }
 
     return this.ros
   }
 
+  ensureConnection() {
+    if (!this.ros) {
+      this.connect()
+    }
+  }
+
   getTopic(config) {
+    this.ensureConnection()
     const key = `${config.name}:${config.messageType}`
     if (!this.topicCache.has(key)) {
       this.topicCache.set(
@@ -39,16 +48,10 @@ class RosService {
   }
 
   publish(config, data) {
-    if (!this.ros) {
-      return
-    }
     this.getTopic(config).publish(new ROSLIB.Message(data))
   }
 
   subscribe(config, handler) {
-    if (!this.ros) {
-      return () => {}
-    }
     const topic = this.getTopic(config)
     topic.subscribe(handler)
     return () => topic.unsubscribe(handler)
