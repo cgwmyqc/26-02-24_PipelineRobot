@@ -48,7 +48,7 @@
         <VideoPanel :frame="videoFrame" :connected="rosConnected" />
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
-          <div class="panel-body">
+          <div class="panel-body point-panel-body">
             <PointCloudScene :points="pointCloudPoints" />
           </div>
         </section>
@@ -128,7 +128,7 @@ function handleLogout() {
 .dashboard-shell {
   display: grid;
   grid-template-columns: minmax(0, 56.25fr) minmax(0, 43.75fr);
-  align-items: start;
+  align-items: stretch;
   gap: 16px;
   padding: 0 18px 18px;
 }
@@ -138,8 +138,12 @@ function handleLogout() {
 .secondary-grid {
   display: grid;
   gap: 16px;
-  align-content: start;
   min-height: 0;
+}
+
+.dashboard-primary,
+.dashboard-aside {
+  height: 100%;
 }
 
 .secondary-grid > * {
@@ -161,15 +165,23 @@ function handleLogout() {
 
 .dashboard-aside {
   grid-template-rows: 420px minmax(0, 1fr);
+  height: 100%;
 }
 
 .point-panel {
+  height: 100%;
   min-height: 300px;
+  display: flex;
+  flex-direction: column;
 }
 
-.point-panel :deep(.panel-body) {
+.point-panel-body {
+  flex: 1;
   position: relative;
-  min-height: 0;
+  height: calc(100% - 46px);
+  min-height: 320px;
+  padding: 0;
+  overflow: hidden;
 }
 
 .dashboard-primary > *,
