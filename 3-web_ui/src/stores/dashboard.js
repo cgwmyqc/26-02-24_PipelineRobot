@@ -141,6 +141,7 @@ function normalizeAssetUrl(url) {
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
     patrolMode: 'auto',
+    pendingPatrolMode: '',
     temperature: null,
     humidity: null,
     sludgeThickness: null,
@@ -183,6 +184,10 @@ export const useDashboardStore = defineStore('dashboard', {
     },
     setPatrolModeByState(isManual) {
       this.patrolMode = normalizeMode(isManual)
+      this.pendingPatrolMode = ''
+    },
+    setPendingPatrolMode(mode) {
+      this.pendingPatrolMode = mode
     },
     updateRosMetric(key, value) {
       this[key] = value

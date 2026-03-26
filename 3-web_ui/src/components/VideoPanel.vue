@@ -35,7 +35,7 @@ const frameSrc = computed(() => {
 
 <style scoped>
 .video-panel {
-  min-height: 340px;
+  min-height: 420px;
   height: 100%;
 }
 

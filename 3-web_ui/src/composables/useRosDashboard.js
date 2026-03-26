@@ -1,4 +1,4 @@
-﻿import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useDashboardStore } from '../stores/dashboard'
 import { rosService } from '../services/ros'
@@ -6,8 +6,9 @@ import { appConfig } from '../config/app'
 
 export function useRosDashboard() {
   const store = useDashboardStore()
-  const { patrolMode } = storeToRefs(store)
+  const { patrolMode, pendingPatrolMode } = storeToRefs(store)
   const unsubscribers = []
+  const uiPatrolMode = computed(() => pendingPatrolMode.value || patrolMode.value)
 
   function publishManualMode(isManual) {
     rosService.publish(appConfig.topics.manualModeCommand, {
@@ -16,6 +17,7 @@ export function useRosDashboard() {
   }
 
   function setPatrolMode(mode) {
+    store.setPendingPatrolMode(mode)
     publishManualMode(mode === 'manual')
   }
 
@@ -125,7 +127,7 @@ export function useRosDashboard() {
   })
 
   return {
-    patrolMode,
+    patrolMode: uiPatrolMode,
     setPatrolMode,
     publishMoveCommand,
     startAutoInspection,

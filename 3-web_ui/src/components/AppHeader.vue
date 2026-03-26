@@ -1,15 +1,6 @@
-﻿<template>
+<template>
   <header class="app-header">
-    <div class="brand">
-      <div class="brand-mark">UNI</div>
-      <div class="brand-cut"></div>
-    </div>
-
-    <div class="title-wrap">
-      <p class="eyebrow">Digital Twin Platform</p>
-      <h1>下水道巡检机器人智能监测平台</h1>
-    </div>
-
+    <div class="header-image" :style="headerStyle"></div>
     <div class="header-actions">
       <div class="connection-chip">
         <div class="status-dot" :class="{ online: connected }"></div>
@@ -26,6 +17,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { resolveImageAsset } from '../utils/assets'
 
 const props = defineProps({
   connected: {
@@ -41,75 +33,55 @@ const props = defineProps({
 defineEmits(['logout'])
 
 const userInitial = computed(() => props.userName?.slice(0, 1)?.toUpperCase() || 'U')
+const headerImage = resolveImageAsset('header')
+const headerStyle = computed(() => (
+  headerImage
+    ? { backgroundImage: `url(${headerImage})` }
+    : {}
+))
 </script>
 
 <style scoped>
 .app-header {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  min-height: 82px;
-  padding-right: 18px;
-  border-bottom: 1px solid rgba(103, 212, 255, 0.16);
-  background: linear-gradient(180deg, rgba(7, 16, 30, 0.96), rgba(11, 24, 40, 0.78));
-}
-
-.brand {
   position: relative;
-  height: 82px;
-  background: linear-gradient(135deg, rgba(33, 126, 168, 0.35), rgba(18, 49, 77, 0.72));
-  border-right: 1px solid rgba(103, 212, 255, 0.22);
+  min-height: 85px;
+  padding-bottom: 10px;
+  overflow: hidden;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  font-size: 30px;
-  font-weight: 800;
-  color: #59e9f5;
-  letter-spacing: 2px;
-}
-
-.brand-cut {
+.header-image {
   position: absolute;
-  right: -10px;
-  bottom: -1px;
-  width: 20px;
-  height: 12px;
-  background: linear-gradient(135deg, transparent 50%, rgba(33, 126, 168, 0.58) 50%);
-}
-
-.eyebrow {
-  margin: 0 0 6px;
-  color: var(--text-dim);
-  font-size: 12px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-
-.title-wrap h1 {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: 1px;
+  inset: 0 0 10px;
+  background:
+    linear-gradient(90deg, rgba(4, 13, 24, 0.22), rgba(7, 18, 31, 0.08)),
+    linear-gradient(180deg, rgba(7, 16, 30, 0.96), rgba(11, 24, 40, 0.78));
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
 }
 
 .header-actions {
+  position: relative;
+  z-index: 1;
+  min-height: 85px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  color: var(--text-dim);
+  justify-content: flex-end;
+  gap: 10px;
+  padding-right: 18px;
 }
 
 .connection-chip,
 .user-chip {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid rgba(103, 212, 255, 0.12);
-  background: rgba(9, 18, 30, 0.52);
+  background: rgba(9, 18, 30, 0.56);
+  backdrop-filter: blur(6px);
+  font-size: 13px;
 }
 
 .status-dot {
@@ -128,24 +100,21 @@ const userInitial = computed(() => props.userName?.slice(0, 1)?.toUpperCase() ||
 .avatar {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, #ffecc5, #bfbfbf);
   color: #0b1220;
+  font-size: 13px;
   font-weight: 700;
 }
 
 @media (max-width: 1024px) {
-  .app-header {
-    grid-template-columns: 88px 1fr;
-    padding-right: 12px;
-  }
-
   .header-actions {
-    grid-column: 1 / -1;
-    padding: 0 12px 12px;
     flex-wrap: wrap;
+    justify-content: flex-start;
+    align-content: center;
+    padding: 10px 14px 0;
   }
 }
 </style>

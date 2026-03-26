@@ -6,8 +6,8 @@
         <el-form-item>
           <el-radio-group v-model="filters.mode">
             <el-radio value="">全部</el-radio>
-            <el-radio value="1">自动</el-radio>
-            <el-radio value="0">手动</el-radio>
+            <el-radio value="1">自动巡检</el-radio>
+            <el-radio value="0">人工巡检</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item>
@@ -35,13 +35,13 @@
 
       <div class="table-shell">
         <el-table :data="list" class="history-table" height="100%" v-loading="loading">
-          <el-table-column type="index" label="序号" width="62" />
-          <el-table-column prop="mode" label="巡检方式" width="92" />
-          <el-table-column prop="environment" label="管道环境" width="96" />
-          <el-table-column prop="operator" label="操作人" width="92" />
-          <el-table-column prop="result" label="分析结果" min-width="120" />
-          <el-table-column prop="createdAt" label="创建日期" width="116" />
-          <el-table-column label="操作" width="148">
+          <el-table-column type="index" label="序号" width="52" />
+          <el-table-column prop="mode" label="巡检方式" width="76" />
+          <el-table-column prop="environment" label="管道环境" width="86" />
+          <el-table-column prop="operator" label="操作人" width="70" />
+          <el-table-column prop="result" label="巡检结果" min-width="96" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建日期" width="90" />
+          <el-table-column label="操作" width="96">
             <template #default="{ row }">
               <div class="action-group">
                 <el-button link type="success" @click="$emit('detail', row.id)">详情</el-button>
@@ -149,7 +149,7 @@ function handlePageChange(page) {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 6px 10px;
+  gap: 8px 10px;
   padding: 2px 0;
 }
 
@@ -184,7 +184,24 @@ function handlePageChange(page) {
 }
 
 :deep(.date-picker) {
-  width: 154px;
+  width: 150px;
+}
+
+:deep(.el-radio),
+:deep(.el-input__inner),
+:deep(.el-input__wrapper),
+:deep(.el-button),
+:deep(.el-date-editor) {
+  font-size: 13px;
+}
+
+:deep(.el-table th.el-table__cell) {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:deep(.el-table td.el-table__cell) {
+  font-size: 13px;
 }
 
 :deep(.el-radio) {
