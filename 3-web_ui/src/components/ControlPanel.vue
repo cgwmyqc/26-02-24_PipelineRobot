@@ -205,8 +205,9 @@ function toggleMove(direction, active) {
 }
 
 .hud-grid {
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
 }
@@ -252,6 +253,7 @@ function toggleMove(direction, active) {
 
 .motion-actions {
   display: grid;
+  flex: 0 0 78px;
   align-content: center;
   justify-items: center;
   gap: 16px;
@@ -297,11 +299,14 @@ function toggleMove(direction, active) {
 
 .metrics {
   display: grid;
-  justify-content: end;
+  justify-content: start;
+  margin-left: auto;
   align-content: center;
   gap: 16px;
   min-height: 240px;
-  padding: 16px;
+  width: 214px;
+  max-width: 214px;
+  padding: 14px 12px;
   border-radius: 18px;
 }
 
@@ -309,8 +314,10 @@ function toggleMove(direction, active) {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
-  padding: 12px;
-  border-radius: 18px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .pill {
@@ -320,9 +327,10 @@ function toggleMove(direction, active) {
   justify-items: center;
   gap: 10px;
   padding: 5px 12px;
-  background: rgba(9, 22, 36, 0.7);
-  border: 1px solid rgba(103, 212, 255, 0.08);
+  background: transparent;
+  border: 0;
   text-align: center;
+  border-radius: 18px;
 }
 
 .pill span {
@@ -338,7 +346,7 @@ function toggleMove(direction, active) {
 
 @media (max-width: 1440px) {
   .hud-grid {
-    grid-template-columns: 78px 1fr;
+    justify-content: space-between;
   }
 
   .state-bar {
@@ -365,6 +373,10 @@ function toggleMove(direction, active) {
     grid-template-columns: 1fr;
   }
 
+  .hud-grid {
+    display: grid;
+  }
+
   .motion-actions {
     grid-auto-flow: column;
     grid-template-columns: repeat(3, 53px);
@@ -373,6 +385,9 @@ function toggleMove(direction, active) {
 
   .metrics {
     justify-content: start;
+    margin-left: 0;
+    width: 100%;
+    max-width: none;
   }
 }
 </style>

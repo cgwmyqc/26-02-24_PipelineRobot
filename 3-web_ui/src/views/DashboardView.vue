@@ -128,6 +128,7 @@ function handleLogout() {
 .dashboard-shell {
   display: grid;
   grid-template-columns: minmax(0, 56.25fr) minmax(0, 43.75fr);
+  align-items: start;
   gap: 16px;
   padding: 0 18px 18px;
 }
@@ -137,6 +138,8 @@ function handleLogout() {
 .secondary-grid {
   display: grid;
   gap: 16px;
+  align-content: start;
+  min-height: 0;
 }
 
 .secondary-grid > * {
@@ -162,6 +165,16 @@ function handleLogout() {
 
 .point-panel {
   min-height: 300px;
+}
+
+.point-panel :deep(.panel-body) {
+  position: relative;
+  min-height: 0;
+}
+
+.dashboard-primary > *,
+.dashboard-aside > * {
+  min-height: 0;
 }
 
 @media (max-width: 1440px) {
