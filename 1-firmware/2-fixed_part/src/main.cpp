@@ -108,12 +108,12 @@ constexpr float WHEEL_CIRCUMFERENCE_M = 3.1415926f * WHEEL_DIAMETER_M;
 // 每米对应多少个编码器计数
 constexpr float COUNTS_PER_METER = ENCODER_X4_COUNTS_PER_REV / WHEEL_CIRCUMFERENCE_M;
 
-// 每次步进 0.1m
-constexpr float AUTO_STEP_LENGTH_M = 0.1f;
+// 每次步进 0.3m
+constexpr float AUTO_STEP_LENGTH_M = 0.3f;
 constexpr int32_t AUTO_STEP_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_STEP_LENGTH_M + 0.5f);
 
 // 设定总长度（这里先写死，后续可改成订阅参数）
-constexpr float AUTO_TOTAL_LENGTH_M = 1.0f;
+constexpr float AUTO_TOTAL_LENGTH_M = 1.2f;
 constexpr int32_t AUTO_TOTAL_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_TOTAL_LENGTH_M + 0.5f);
 
 // 反向回原点的允许误差
@@ -419,7 +419,8 @@ void IRAM_ATTR encoder_isr()
 
   portENTER_CRITICAL_ISR(&g_encoder_mux);
   uint8_t idx = (g_encoder_prev_ab << 2) | ab;
-  g_encoder_count += quad_table[idx];
+  // Keep forward travel positive across encoder_count/travel_m/UI telemetry.
+  g_encoder_count -= quad_table[idx];
   g_encoder_prev_ab = ab;
   portEXIT_CRITICAL_ISR(&g_encoder_mux);
 }
