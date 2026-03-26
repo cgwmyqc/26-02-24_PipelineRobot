@@ -20,8 +20,9 @@ let scene
 let camera
 let controls
 let frameId
-let pointCloud
+let initRetryId
 let resizeObserver
+let pointCloud
 let gridHelper
 let axesHelper
 
@@ -33,7 +34,6 @@ function getContainerSize() {
 
 function createScene() {
   scene = new THREE.Scene()
-  scene.background = null
 
   camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400)
   camera.position.set(18, 14, 26)
@@ -70,6 +70,10 @@ function createScene() {
 }
 
 function buildPoints() {
+  if (!scene) {
+    return
+  }
+
   const geometry = new THREE.BufferGeometry()
   const positions = []
   const colors = []
@@ -144,18 +148,23 @@ function animate() {
   renderer?.render(scene, camera)
 }
 
+function scheduleInitRetry() {
+  cancelAnimationFrame(initRetryId)
+  initRetryId = requestAnimationFrame(() => {
+    initScene()
+  })
+}
+
 function initScene() {
   if (renderer || !container.value) {
     return
   }
 
-  const { width, height } = getContainerSize()
-  if (!width || !height) {
-    return
-  }
-
   createScene()
-  updateRendererSize()
+  if (!updateRendererSize()) {
+    renderer.setSize(1, 1, false)
+    scheduleInitRetry()
+  }
   animate()
 }
 
@@ -169,6 +178,7 @@ function handleResize() {
 
 function disposeScene() {
   cancelAnimationFrame(frameId)
+  cancelAnimationFrame(initRetryId)
   resizeObserver?.disconnect()
   controls?.dispose()
   if (pointCloud) {
@@ -218,10 +228,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .point-cloud-scene {
-  position: absolute;
-  inset: 0;
+  position: relative;
   width: 100%;
   height: 100%;
+  min-height: 320px;
   overflow: hidden;
   background:
     radial-gradient(circle at 20% 20%, rgba(79, 171, 222, 0.12), transparent 28%),
