@@ -3,14 +3,14 @@
     <div class="panel-title">监测分析</div>
     <div class="panel-body analysis-body">
       <div class="analysis-card">
-        <div class="hexagon cyan">⚡</div>
+        <div class="hexagon cyan">裂</div>
         <div>
           <h3>裂缝识别</h3>
           <p>下水管道结构完整，未见裂缝迹象，运行状态正常。</p>
         </div>
       </div>
       <div class="analysis-card">
-        <div class="hexagon orange">≈</div>
+        <div class="hexagon orange">变</div>
         <div>
           <h3 class="danger">变形分析</h3>
           <p>下水管道存在变形迹象，请及时安排复核和处理。</p>
@@ -68,6 +68,8 @@
 h3 {
   margin: 0 0 6px;
   color: #7ff3c8;
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .danger {
@@ -77,6 +79,7 @@ h3 {
 p {
   margin: 0;
   color: var(--text-muted);
+  font-size: 13px;
   line-height: 1.6;
 }
 </style>

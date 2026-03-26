@@ -1,10 +1,11 @@
-﻿<template>
+<template>
   <div ref="container" class="point-cloud-scene"></div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const props = defineProps({
   points: {
@@ -17,10 +18,62 @@ const container = ref(null)
 let renderer
 let scene
 let camera
+let controls
 let frameId
+let initRetryId
+let resizeObserver
 let pointCloud
+let gridHelper
+let axesHelper
+
+function getContainerSize() {
+  const width = container.value?.clientWidth || 0
+  const height = container.value?.clientHeight || 0
+  return { width, height }
+}
+
+function createScene() {
+  scene = new THREE.Scene()
+
+  camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400)
+  camera.position.set(18, 14, 26)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.domElement.style.display = 'block'
+  renderer.domElement.style.width = '100%'
+  renderer.domElement.style.height = '100%'
+  container.value.appendChild(renderer.domElement)
+
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.dampingFactor = 0.08
+  controls.enablePan = false
+  controls.minDistance = 4
+  controls.maxDistance = 160
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.1))
+
+  const keyLight = new THREE.DirectionalLight(0x8fdcff, 1.2)
+  keyLight.position.set(12, 16, 10)
+  scene.add(keyLight)
+
+  gridHelper = new THREE.GridHelper(40, 20, 0x2e9fd8, 0x18496f)
+  gridHelper.position.y = -10
+  scene.add(gridHelper)
+
+  axesHelper = new THREE.AxesHelper(10)
+  scene.add(axesHelper)
+
+  buildPoints()
+}
 
 function buildPoints() {
+  if (!scene) {
+    return
+  }
+
   const geometry = new THREE.BufferGeometry()
   const positions = []
   const colors = []
@@ -28,14 +81,17 @@ function buildPoints() {
   props.points.forEach((point) => {
     positions.push(point.x, point.y, point.z)
     const ratio = Math.min(1, Math.abs(point.z) / 8)
-    colors.push(0.1 + ratio * 0.4, 0.7 + ratio * 0.2, 0.2)
+    colors.push(0.12 + ratio * 0.45, 0.62 + ratio * 0.24, 0.24 + ratio * 0.32)
   })
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
 
   const material = new THREE.PointsMaterial({
-    size: 0.28,
+    size: 0.34,
+    sizeAttenuation: true,
     vertexColors: true
   })
 
@@ -47,44 +103,100 @@ function buildPoints() {
 
   pointCloud = new THREE.Points(geometry, material)
   scene.add(pointCloud)
+  framePointCloud()
 }
 
-function initScene() {
-  const width = container.value.clientWidth
-  const height = container.value.clientHeight
+function framePointCloud() {
+  if (!pointCloud?.geometry?.boundingBox || !camera || !controls) {
+    return
+  }
 
-  scene = new THREE.Scene()
-  camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 400)
-  camera.position.set(0, 0, 92)
+  const box = pointCloud.geometry.boundingBox
+  const center = new THREE.Vector3()
+  const size = new THREE.Vector3()
+  box.getCenter(center)
+  box.getSize(size)
 
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-  renderer.setPixelRatio(window.devicePixelRatio)
-  renderer.setSize(width, height)
-  container.value.appendChild(renderer.domElement)
+  const radius = Math.max(size.length() * 0.6, 8)
+  controls.target.copy(center)
+  camera.position.set(center.x + radius, center.y + radius * 0.75, center.z + radius)
+  camera.near = 0.1
+  camera.far = Math.max(radius * 20, 200)
+  camera.updateProjectionMatrix()
+  controls.update()
+}
 
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2))
-  buildPoints()
-  animate()
+function updateRendererSize() {
+  if (!container.value || !renderer || !camera) {
+    return false
+  }
+
+  const { width, height } = getContainerSize()
+  if (!width || !height) {
+    return false
+  }
+
+  camera.aspect = width / height
+  camera.updateProjectionMatrix()
+  renderer.setSize(width, height, false)
+  return true
 }
 
 function animate() {
   frameId = requestAnimationFrame(animate)
-  if (pointCloud) {
-    pointCloud.rotation.z += 0.0022
-    pointCloud.rotation.x = 0.25
+  controls?.update()
+  renderer?.render(scene, camera)
+}
+
+function scheduleInitRetry() {
+  cancelAnimationFrame(initRetryId)
+  initRetryId = requestAnimationFrame(() => {
+    initScene()
+  })
+}
+
+function initScene() {
+  if (renderer || !container.value) {
+    return
   }
-  renderer.render(scene, camera)
+
+  createScene()
+  if (!updateRendererSize()) {
+    renderer.setSize(1, 1, false)
+    scheduleInitRetry()
+  }
+  animate()
 }
 
 function handleResize() {
-  if (!container.value || !renderer || !camera) {
+  if (!renderer) {
+    initScene()
     return
   }
-  const width = container.value.clientWidth
-  const height = container.value.clientHeight
-  camera.aspect = width / height
-  camera.updateProjectionMatrix()
-  renderer.setSize(width, height)
+  updateRendererSize()
+}
+
+function disposeScene() {
+  cancelAnimationFrame(frameId)
+  cancelAnimationFrame(initRetryId)
+  resizeObserver?.disconnect()
+  controls?.dispose()
+  if (pointCloud) {
+    pointCloud.geometry.dispose()
+    pointCloud.material.dispose()
+  }
+  renderer?.dispose()
+  scene?.clear()
+  if (renderer?.domElement?.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement)
+  }
+  renderer = null
+  scene = null
+  camera = null
+  controls = null
+  pointCloud = null
+  gridHelper = null
+  axesHelper = null
 }
 
 watch(
@@ -99,24 +211,30 @@ watch(
 
 onMounted(() => {
   initScene()
+  resizeObserver = new ResizeObserver(() => {
+    handleResize()
+  })
+  if (container.value) {
+    resizeObserver.observe(container.value)
+  }
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
-  cancelAnimationFrame(frameId)
   window.removeEventListener('resize', handleResize)
-  renderer?.dispose()
-  scene?.clear()
+  disposeScene()
 })
 </script>
 
 <style scoped>
 .point-cloud-scene {
+  position: relative;
   width: 100%;
   height: 100%;
+  min-height: 320px;
+  overflow: hidden;
   background:
-    linear-gradient(rgba(83, 145, 198, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(83, 145, 198, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
+    radial-gradient(circle at 20% 20%, rgba(79, 171, 222, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(7, 18, 29, 0.7), rgba(4, 10, 20, 0.92));
 }
 </style>
