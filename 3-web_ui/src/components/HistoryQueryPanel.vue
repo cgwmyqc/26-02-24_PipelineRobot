@@ -35,13 +35,13 @@
 
       <div class="table-shell">
         <el-table :data="list" class="history-table" height="100%" v-loading="loading">
-          <el-table-column type="index" label="序号" width="52" />
-          <el-table-column prop="mode" label="巡检方式" width="76" />
-          <el-table-column prop="environment" label="管道环境" width="86" />
-          <el-table-column prop="operator" label="操作人" width="70" />
-          <el-table-column prop="result" label="巡检结果" min-width="96" show-overflow-tooltip />
-          <el-table-column prop="createdAt" label="创建日期" width="90" />
-          <el-table-column label="操作" width="96">
+          <el-table-column type="index" label="序号" width="44" />
+          <el-table-column prop="mode" label="巡检方式" min-width="74" show-overflow-tooltip />
+          <el-table-column prop="environment" label="管道环境" min-width="84" show-overflow-tooltip />
+          <el-table-column prop="operator" label="操作人" min-width="68" show-overflow-tooltip />
+          <el-table-column prop="result" label="巡检结果" min-width="76" show-overflow-tooltip />
+          <el-table-column prop="createdAt" label="创建日期" min-width="76" show-overflow-tooltip />
+          <el-table-column label="操作" width="82">
             <template #default="{ row }">
               <div class="action-group">
                 <el-button link type="success" @click="$emit('detail', row.id)">详情</el-button>
@@ -160,6 +160,7 @@ function handlePageChange(page) {
 .history-table {
   width: 100%;
   height: 100%;
+  table-layout: fixed;
 }
 
 .pagination-shell {
@@ -171,8 +172,13 @@ function handlePageChange(page) {
 .action-group {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   white-space: nowrap;
+}
+
+:deep(.el-table .cell) {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 :deep(.el-form-item) {
@@ -184,7 +190,7 @@ function handlePageChange(page) {
 }
 
 :deep(.date-picker) {
-  width: 150px;
+  width: 120px;
 }
 
 :deep(.el-radio),
@@ -206,6 +212,7 @@ function handlePageChange(page) {
 
 :deep(.el-radio) {
   color: var(--text-dim);
+  margin-right: 15px;
 }
 
 :deep(.el-pagination) {
