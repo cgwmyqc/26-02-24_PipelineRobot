@@ -1,16 +1,19 @@
-﻿<template>
+<template>
   <div ref="container" class="three-canvas"></div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 const container = ref(null)
 let renderer
 let scene
 let camera
+let controls
 let frameId
+let resizeObserver
 let pipeGroup
 
 function createInspectionCabin() {
@@ -46,21 +49,36 @@ function createInspectionCabin() {
   return group
 }
 
-function initScene() {
-  const width = container.value.clientWidth
-  const height = container.value.clientHeight
+function getContainerSize() {
+  const width = container.value?.clientWidth || 0
+  const height = container.value?.clientHeight || 0
+  return { width, height }
+}
 
+function createScene() {
   scene = new THREE.Scene()
   scene.fog = new THREE.FogExp2(0x08111d, 0.035)
 
-  camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100)
-  camera.position.set(0, 8, 20)
-  camera.lookAt(0, 0, 0)
+  camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100)
+  camera.position.set(0, 7.4, 18)
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-  renderer.setPixelRatio(window.devicePixelRatio)
-  renderer.setSize(width, height)
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+  renderer.domElement.style.display = 'block'
+  renderer.domElement.style.width = '100%'
+  renderer.domElement.style.height = '100%'
   container.value.appendChild(renderer.domElement)
+
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enablePan = false
+  controls.enableDamping = true
+  controls.dampingFactor = 0.08
+  controls.minDistance = 8
+  controls.maxDistance = 30
+  controls.minPolarAngle = 0.45
+  controls.maxPolarAngle = 2.25
+  controls.target.set(0, 1.2, 0)
 
   scene.add(new THREE.AmbientLight(0x89d6ff, 1.8))
 
@@ -132,43 +150,101 @@ function initScene() {
   ground.rotation.x = -Math.PI / 2
   ground.position.y = -3.6
   scene.add(ground)
+}
 
-  animate()
+function updateRendererSize() {
+  if (!container.value || !renderer || !camera) {
+    return false
+  }
+
+  const { width, height } = getContainerSize()
+  if (!width || !height) {
+    return false
+  }
+
+  camera.aspect = width / height
+  camera.updateProjectionMatrix()
+  renderer.setSize(width, height, false)
+  return true
 }
 
 function animate() {
   frameId = requestAnimationFrame(animate)
-  pipeGroup.rotation.y += 0.002
-  renderer.render(scene, camera)
+  controls?.update()
+  renderer?.render(scene, camera)
+}
+
+function initScene() {
+  if (renderer || !container.value) {
+    return
+  }
+
+  const { width, height } = getContainerSize()
+  if (!width || !height) {
+    return
+  }
+
+  createScene()
+  updateRendererSize()
+  animate()
 }
 
 function handleResize() {
-  if (!container.value || !renderer || !camera) {
+  if (!renderer) {
+    initScene()
     return
   }
-  const width = container.value.clientWidth
-  const height = container.value.clientHeight
-  camera.aspect = width / height
-  camera.updateProjectionMatrix()
-  renderer.setSize(width, height)
+  updateRendererSize()
+}
+
+function disposeScene() {
+  cancelAnimationFrame(frameId)
+  resizeObserver?.disconnect()
+  controls?.dispose()
+  renderer?.dispose()
+  scene?.traverse((object) => {
+    if (object.geometry) {
+      object.geometry.dispose()
+    }
+    if (object.material) {
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      materials.forEach((material) => material?.dispose?.())
+    }
+  })
+  scene?.clear()
+  if (renderer?.domElement?.parentNode) {
+    renderer.domElement.parentNode.removeChild(renderer.domElement)
+  }
+  renderer = null
+  scene = null
+  camera = null
+  controls = null
+  pipeGroup = null
 }
 
 onMounted(() => {
   initScene()
+  resizeObserver = new ResizeObserver(() => {
+    handleResize()
+  })
+  if (container.value) {
+    resizeObserver.observe(container.value)
+  }
   window.addEventListener('resize', handleResize)
 })
 
 onBeforeUnmount(() => {
-  cancelAnimationFrame(frameId)
   window.removeEventListener('resize', handleResize)
-  renderer?.dispose()
-  scene?.clear()
+  disposeScene()
 })
 </script>
 
 <style scoped>
 .three-canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 </style>

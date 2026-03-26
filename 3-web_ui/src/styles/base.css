@@ -60,9 +60,10 @@ textarea {
   padding: 0 18px;
   background: rgba(31, 45, 65, 0.9);
   border-bottom: 1px solid rgba(117, 240, 194, 0.08);
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 1px;
+  line-height: 1;
 }
 
 .panel-body {

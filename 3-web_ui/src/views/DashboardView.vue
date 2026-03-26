@@ -1,6 +1,10 @@
-﻿<template>
+<template>
   <div class="dashboard-page">
-    <AppHeader :connected="rosConnected" :user-name="authStore.user?.displayName || authStore.user?.username || 'admin'" @logout="handleLogout" />
+    <AppHeader
+      :connected="rosConnected"
+      :user-name="authStore.user?.displayName || authStore.user?.username || 'admin'"
+      @logout="handleLogout"
+    />
 
     <main class="dashboard-shell">
       <section class="dashboard-primary">
@@ -8,18 +12,16 @@
           <div class="panel-title">主控面板</div>
           <div class="panel-body control-panel-body">
             <ControlPanel
-              :patrol-mode="patrolMode"
+              :patrol-mode="uiPatrolMode"
               :temperature="temperature"
+              :humidity="humidity"
               :travel-meters="travelMeters"
               :motor-enabled="motorEnabled"
               :motor-run-state="motorRunState"
-              :encoder-count="encoderCount"
-              :water-detected="waterDetected"
               :motion-reached="motionReached"
               :set-patrol-mode="setPatrolMode"
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
-              :mark-detect-done="markDetectDone"
             />
           </div>
         </div>
@@ -46,7 +48,7 @@
         <VideoPanel :frame="videoFrame" :connected="rosConnected" />
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
-          <div class="panel-body">
+          <div class="panel-body point-panel-body">
             <PointCloudScene :points="pointCloudPoints" />
           </div>
         </section>
@@ -63,6 +65,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import AnalysisPanel from '../components/AnalysisPanel.vue'
@@ -81,13 +84,12 @@ const authStore = useAuthStore()
 const store = useDashboardStore()
 
 const {
-  patrolMode,
+  patrolMode: storePatrolMode,
   temperature,
+  humidity,
   travelMeters,
   motorEnabled,
   motorRunState,
-  encoderCount,
-  waterDetected,
   motionReached,
   rosConnected,
   videoFrame,
@@ -102,7 +104,14 @@ const {
   pointCloudPoints
 } = storeToRefs(store)
 
-const { setPatrolMode, publishMoveCommand, startAutoInspection, markDetectDone } = useRosDashboard()
+const {
+  patrolMode: rosPatrolMode,
+  setPatrolMode,
+  publishMoveCommand,
+  startAutoInspection
+} = useRosDashboard()
+
+const uiPatrolMode = computed(() => rosPatrolMode.value || storePatrolMode.value)
 const { loadHistory, changeHistoryPage, openDetail, closeDetail, exportRecord } = store
 
 function handleLogout() {
@@ -118,9 +127,10 @@ function handleLogout() {
 
 .dashboard-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(360px, 1.1fr);
+  grid-template-columns: minmax(0, 56.25fr) minmax(0, 43.75fr);
+  align-items: stretch;
   gap: 16px;
-  padding: 18px;
+  padding: 0 18px 18px;
 }
 
 .dashboard-primary,
@@ -128,6 +138,12 @@ function handleLogout() {
 .secondary-grid {
   display: grid;
   gap: 16px;
+  min-height: 0;
+}
+
+.dashboard-primary,
+.dashboard-aside {
+  height: 100%;
 }
 
 .secondary-grid > * {
@@ -135,26 +151,52 @@ function handleLogout() {
 }
 
 .control-panel-shell {
-  min-height: 620px;
+  min-height: 500px;
 }
 
 .control-panel-body {
-  padding: 18px;
+  padding: 16px 18px 14px;
 }
 
 .secondary-grid {
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
   align-items: stretch;
 }
 
+.dashboard-aside {
+  grid-template-rows: 420px minmax(0, 1fr);
+  height: 100%;
+}
+
 .point-panel {
-  min-height: 340px;
+  height: 100%;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.point-panel-body {
+  flex: 1;
+  position: relative;
+  height: calc(100% - 46px);
+  min-height: 320px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dashboard-primary > *,
+.dashboard-aside > * {
+  min-height: 0;
 }
 
 @media (max-width: 1440px) {
   .dashboard-shell,
   .secondary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-aside {
+    grid-template-rows: auto;
   }
 }
 </style>
