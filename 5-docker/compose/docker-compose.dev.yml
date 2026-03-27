@@ -7,9 +7,9 @@
       - "8888:8888/udp"
     command: udp4 --port 8888 -v6
 
-  rosbridge:
-    image: osrf/ros:humble-desktop
-    container_name: pipeline_robot_rosbridge
+  web_ros2_bridge:
+    image: ros:humble-ros-base-jammy
+    container_name: web_ros2_bridge
     restart: unless-stopped
     ports:
       - "9090:9090"
