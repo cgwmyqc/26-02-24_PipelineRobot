@@ -1,4 +1,4 @@
-#include <Arduino.h>
+﻿#include <Arduino.h>
 #include <micro_ros_platformio.h>
 #include <rmw_microros/rmw_microros.h>
 #include <SPI.h>
@@ -13,7 +13,7 @@
 #include <std_msgs/msg/float32.h>
 
 // ============================================================
-// 宏定义
+// 瀹忓畾涔?
 // ============================================================
 #define RCCHECK(fn)                   \
   {                                   \
@@ -42,7 +42,7 @@
   }
 
 // ============================================================
-// W5500 引脚定义
+// W5500 寮曡剼瀹氫箟
 // ============================================================
 #define W5500_CS   14
 #define W5500_RST  9
@@ -52,7 +52,7 @@
 #define W5500_SCK  13
 
 // ============================================================
-// 网络配置
+// 缃戠粶閰嶇疆
 // ============================================================
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
 IPAddress client_ip(192, 168, 1, 178);
@@ -65,67 +65,70 @@ const uint16_t agent_port = 8888;
 const uint16_t client_port = 8890;
 
 // ============================================================
-// IO 定义
+// IO 瀹氫箟
 // ============================================================
-// 模式切换输入：高电平触发一次模式翻转
+// 妯″紡鍒囨崲杈撳叆锛氶珮鐢靛钩瑙﹀彂涓€娆℃ā寮忕炕杞?
 #define MODE_TOGGLE_IN_PIN      1
 
-// 模式输出：LOW=自动，HIGH=手动
+// 妯″紡杈撳嚭锛歀OW=鑷姩锛孒IGH=鎵嬪姩
 #define MODE_OUT_PIN            15
 
-// 电机使能继电器输出：HIGH=吸合
+// 鐢垫満浣胯兘缁х數鍣ㄨ緭鍑猴細HIGH=鍚稿悎
 #define MOTOR_ENABLE_PIN        37
 
-// 电机方向输出
-// 同为 HIGH -> 正转
-// 同为 LOW  -> 反转
-// 不同      -> 停止
+// 鐢垫満鏂瑰悜杈撳嚭
+// 鍚屼负 HIGH -> 姝ｈ浆
+// 鍚屼负 LOW  -> 鍙嶈浆
+// 涓嶅悓      -> 鍋滄
 #define MOTOR_DIR_PIN_A         35
 #define MOTOR_DIR_PIN_B         36
 
-// 手动按钮输入，高有效
+// 鎵嬪姩鎸夐挳杈撳叆锛岄珮鏈夋晥
 #define MANUAL_FORWARD_BTN_PIN  2
 #define MANUAL_REVERSE_BTN_PIN  3
 
 // ============================================================
-// 编码器 IO 定义
+// 缂栫爜鍣?IO 瀹氫箟
 // ============================================================
 #define ENCODER_A_PIN  45
 #define ENCODER_B_PIN  46
 #define ENCODER_Z_PIN  47
 
 // ============================================================
-// 编码器与运动参数
+// 缂栫爜鍣ㄤ笌杩愬姩鍙傛暟
 // ============================================================
-// 编码器：360线，AB相4倍频 => 1440 counts/rev
+// 缂栫爜鍣細360绾匡紝AB鐩?鍊嶉 => 1440 counts/rev
 constexpr int   ENCODER_LINES = 360;
 constexpr int   ENCODER_X4_COUNTS_PER_REV = ENCODER_LINES * 4;
 
-// 轮径 26mm = 0.026m
+// 杞緞 26mm = 0.026m
 constexpr float WHEEL_DIAMETER_M = 0.026f;
 constexpr float WHEEL_CIRCUMFERENCE_M = 3.1415926f * WHEEL_DIAMETER_M;
 
-// 每米对应多少个编码器计数
+// 姣忕背瀵瑰簲澶氬皯涓紪鐮佸櫒璁℃暟
 constexpr float COUNTS_PER_METER = ENCODER_X4_COUNTS_PER_REV / WHEEL_CIRCUMFERENCE_M;
 
-// 每次步进 0.3m
+// 姣忔姝ヨ繘 0.3m
 constexpr float AUTO_STEP_LENGTH_M = 0.3f;
 constexpr int32_t AUTO_STEP_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_STEP_LENGTH_M + 0.5f);
+constexpr float AUTO_FIRST_DETECT_OFFSET_M = 0.5f;
+constexpr int32_t AUTO_FIRST_DETECT_COUNTS =
+    (int32_t)(COUNTS_PER_METER * AUTO_FIRST_DETECT_OFFSET_M + 0.5f);
 
-// 设定总长度（这里先写死，后续可改成订阅参数）
+// 璁惧畾鎬婚暱搴︼紙杩欓噷鍏堝啓姝伙紝鍚庣画鍙敼鎴愯闃呭弬鏁帮級
 constexpr float AUTO_TOTAL_LENGTH_M = 1.2f;
 constexpr int32_t AUTO_TOTAL_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_TOTAL_LENGTH_M + 0.5f);
 
-// 反向回原点的允许误差
+// 鍙嶅悜鍥炲師鐐圭殑鍏佽璇樊
 constexpr int32_t HOME_TOLERANCE_COUNTS = 5;
 
 // ============================================================
-// 消抖参数
+// 娑堟姈鍙傛暟
 // ============================================================
 constexpr uint32_t DEBOUNCE_MS = 30;
 
 // ============================================================
-// 状态定义
+// 鐘舵€佸畾涔?
 // ============================================================
 typedef enum
 {
@@ -143,50 +146,50 @@ typedef enum
 
 typedef enum
 {
-  AUTO_IDLE = 0,          // 空闲
-  AUTO_MOVING_FORWARD,    // 前进中
-  AUTO_WAIT_DETECT_DONE,  // 到位后等待检测完成
-  AUTO_RETURNING_HOME,    // 回原点中
-  AUTO_FINISHED           // 自动流程完成
+  AUTO_IDLE = 0,          // 绌洪棽
+  AUTO_MOVING_FORWARD,    // 鍓嶈繘涓?
+  AUTO_WAIT_DETECT_DONE,  // 鍒颁綅鍚庣瓑寰呮娴嬪畬鎴?
+  AUTO_RETURNING_HOME,    // 鍥炲師鐐逛腑
+  AUTO_FINISHED           // 鑷姩娴佺▼瀹屾垚
 } AutoState_t;
 
 // ============================================================
-// 按键消抖结构体
+// 鎸夐敭娑堟姈缁撴瀯浣?
 // ============================================================
 typedef struct
 {
-  bool raw_state;              // 当前原始采样值
-  bool stable_state;           // 当前稳定值
-  bool last_stable_state;      // 上一次稳定值
-  uint32_t last_change_ms;     // 原始值最后一次变化时间
+  bool raw_state;              // 褰撳墠鍘熷閲囨牱鍊?
+  bool stable_state;           // 褰撳墠绋冲畾鍊?
+  bool last_stable_state;      // 涓婁竴娆＄ǔ瀹氬€?
+  uint32_t last_change_ms;     // 鍘熷鍊兼渶鍚庝竴娆″彉鍖栨椂闂?
 } DebounceInput_t;
 
 // ============================================================
-// 控制器状态
+// 鎺у埗鍣ㄧ姸鎬?
 // ============================================================
 typedef struct
 {
-  bool manual_mode;          // true=手动, false=自动
-  bool motor_enable;         // 当前电机使能状态
-  MotorRunState_t motor_run; // 当前运行状态：1正转，0停止，-1反转
+  bool manual_mode;          // true=鎵嬪姩, false=鑷姩
+  bool motor_enable;         // 褰撳墠鐢垫満浣胯兘鐘舵€?
+  MotorRunState_t motor_run; // 褰撳墠杩愯鐘舵€侊細1姝ｈ浆锛?鍋滄锛?1鍙嶈浆
 
-  bool btn_forward;          // 手动正转按钮状态（消抖后）
-  bool btn_reverse;          // 手动反转按钮状态（消抖后）
+  bool btn_forward;          // 鎵嬪姩姝ｈ浆鎸夐挳鐘舵€侊紙娑堟姈鍚庯級
+  bool btn_reverse;          // 鎵嬪姩鍙嶈浆鎸夐挳鐘舵€侊紙娑堟姈鍚庯級
 
-  int32_t encoder_count;     // 当前编码器计数
-  float travel_m;            // 相对自动起点位移(米)
-  AutoState_t auto_state;    // 自动状态机状态
+  int32_t encoder_count;     // 褰撳墠缂栫爜鍣ㄨ鏁?
+  float travel_m;            // 鐩稿鑷姩璧风偣浣嶇Щ(绫?
+  AutoState_t auto_state;    // 鑷姩鐘舵€佹満鐘舵€?
 
   uint32_t update_ms;
 } ControllerState_t;
 
 // ============================================================
-// 全局变量
+// 鍏ㄥ眬鍙橀噺
 // ============================================================
 AgentState_t g_agent_state = AGENT_DISCONNECTED;
 
 ControllerState_t g_ctrl_state = {
-    false,        // manual_mode: 默认自动
+    false,        // manual_mode: 榛樿鑷姩
     false,        // motor_enable
     MOTOR_STOP,   // motor_run
     false,        // btn_forward
@@ -200,9 +203,9 @@ ControllerState_t g_ctrl_state = {
 SemaphoreHandle_t ctrl_state_mutex = NULL;
 
 // ------------------------------------------------------------
-// 自动模式命令变量
+// 鑷姩妯″紡鍛戒护鍙橀噺
 // ------------------------------------------------------------
-// 注意：这里保留原本的自动控制占位变量，但本版自动流程主要用 start_auto/detect_done
+// 娉ㄦ剰锛氳繖閲屼繚鐣欏師鏈殑鑷姩鎺у埗鍗犱綅鍙橀噺锛屼絾鏈増鑷姩娴佺▼涓昏鐢?start_auto/detect_done
 volatile bool g_auto_enable_cmd = false;
 volatile bool g_auto_forward_cmd = false;
 volatile bool g_auto_reverse_cmd = false;
@@ -210,35 +213,37 @@ volatile bool g_remote_manual_mode_pending = false;
 volatile bool g_remote_manual_mode_value = false;
 
 // ------------------------------------------------------------
-// 编码器相关全局变量
+// 缂栫爜鍣ㄧ浉鍏冲叏灞€鍙橀噺
 // ------------------------------------------------------------
 volatile int32_t g_encoder_count = 0;
 volatile uint8_t g_encoder_prev_ab = 0;
 portMUX_TYPE g_encoder_mux = portMUX_INITIALIZER_UNLOCKED;
 
 // ------------------------------------------------------------
-// 自动运行状态机变量
+// 鑷姩杩愯鐘舵€佹満鍙橀噺
 // ------------------------------------------------------------
-volatile bool g_start_auto_cmd = false;        // 上位机发来：开始自动运行
-volatile bool g_detect_done_cmd = false;       // 上位机发来：当前位置检测完成
-volatile bool g_motion_reached_event = false;  // 本次步进到位事件，供发布线程读取
+volatile bool g_start_auto_cmd = false;        // 涓婁綅鏈哄彂鏉ワ細寮€濮嬭嚜鍔ㄨ繍琛?
+volatile bool g_detect_done_cmd = false;       // 涓婁綅鏈哄彂鏉ワ細褰撳墠浣嶇疆妫€娴嬪畬鎴?
+volatile bool g_motion_reached_event = false;  // 鏈姝ヨ繘鍒颁綅浜嬩欢锛屼緵鍙戝竷绾跨▼璇诲彇
 
 AutoState_t g_auto_state = AUTO_IDLE;
 bool g_auto_task_active = false;
+int32_t g_detect_origin_count = 0;
+bool g_auto_waiting_first_detect = false;
 
-int32_t g_auto_home_count = 0;          // 自动运行起点
-int32_t g_auto_target_count = 0;        // 当前步进目标
-int32_t g_auto_total_target_count = 0;  // 总目标终点
+int32_t g_auto_home_count = 0;          // 鑷姩杩愯璧风偣
+int32_t g_auto_target_count = 0;        // 褰撳墠姝ヨ繘鐩爣
+int32_t g_auto_total_target_count = 0;  // 鎬荤洰鏍囩粓鐐?
 
 // ------------------------------------------------------------
-// 按键消抖对象
+// 鎸夐敭娑堟姈瀵硅薄
 // ------------------------------------------------------------
 DebounceInput_t g_mode_toggle_db = {false, false, false, 0};
 DebounceInput_t g_btn_forward_db = {false, false, false, 0};
 DebounceInput_t g_btn_reverse_db = {false, false, false, 0};
 
 // ============================================================
-// micro-ROS 对象
+// micro-ROS 瀵硅薄
 // ============================================================
 rcl_allocator_t allocator;
 rclc_support_t support;
@@ -286,13 +291,13 @@ std_msgs__msg__Bool manual_forward_cmd_msg;
 std_msgs__msg__Bool manual_reverse_cmd_msg;
 
 // ============================================================
-// UDP 对象
+// UDP 瀵硅薄
 // ============================================================
 EthernetUDP udp;
 bool udp_opened = false;
 
 // ============================================================
-// 函数声明
+// 鍑芥暟澹版槑
 // ============================================================
 bool init_ethernet();
 bool init_io();
@@ -396,13 +401,13 @@ size_t custom_udp_transport_read(struct uxrCustomTransport *transport,
 }
 
 // ============================================================
-// 编码器中断与辅助函数
+// 缂栫爜鍣ㄤ腑鏂笌杈呭姪鍑芥暟
 // ============================================================
-// 说明：
-// 1) A/B 相都绑定 CHANGE 中断
-// 2) 每次中断读取当前 AB 状态
-// 3) 通过前一状态 + 当前状态查表，实现 4 倍频计数
-// 4) 合法正向跳变 +1，合法反向跳变 -1，非法跳变 0
+// 璇存槑锛?
+// 1) A/B 鐩搁兘缁戝畾 CHANGE 涓柇
+// 2) 姣忔涓柇璇诲彇褰撳墠 AB 鐘舵€?
+// 3) 閫氳繃鍓嶄竴鐘舵€?+ 褰撳墠鐘舵€佹煡琛紝瀹炵幇 4 鍊嶉璁℃暟
+// 4) 鍚堟硶姝ｅ悜璺冲彉 +1锛屽悎娉曞弽鍚戣烦鍙?-1锛岄潪娉曡烦鍙?0
 // ============================================================
 void IRAM_ATTR encoder_isr()
 {
@@ -419,13 +424,14 @@ void IRAM_ATTR encoder_isr()
 
   portENTER_CRITICAL_ISR(&g_encoder_mux);
   uint8_t idx = (g_encoder_prev_ab << 2) | ab;
-  // Keep forward travel positive across encoder_count/travel_m/UI telemetry.
-  g_encoder_count -= quad_table[idx];
+  // Motor forward/reverse wiring has been swapped, so flip the encoder sign
+  // here to keep "forward" positive in encoder_count/travel_m telemetry.
+  g_encoder_count += quad_table[idx];
   g_encoder_prev_ab = ab;
   portEXIT_CRITICAL_ISR(&g_encoder_mux);
 }
 
-// 安全读取编码器计数
+// 瀹夊叏璇诲彇缂栫爜鍣ㄨ鏁?
 int32_t get_encoder_count()
 {
   int32_t cnt;
@@ -435,7 +441,7 @@ int32_t get_encoder_count()
   return cnt;
 }
 
-// 安全重置编码器计数，并同步 prev_ab
+// 瀹夊叏閲嶇疆缂栫爜鍣ㄨ鏁帮紝骞跺悓姝?prev_ab
 void reset_encoder_count(int32_t val)
 {
   portENTER_CRITICAL(&g_encoder_mux);
@@ -449,22 +455,22 @@ void reset_encoder_count(int32_t val)
 }
 
 // ============================================================
-// 按键消抖函数
+// 鎸夐敭娑堟姈鍑芥暟
 // ============================================================
-// raw: 当前原始采样值
-// now_ms: 当前毫秒计时
-// 返回值：stable_state
+// raw: 褰撳墠鍘熷閲囨牱鍊?
+// now_ms: 褰撳墠姣璁℃椂
+// 杩斿洖鍊硷細stable_state
 // ============================================================
 bool debounce_update(DebounceInput_t *db, bool raw, uint32_t now_ms)
 {
-  // 原始值变化，记录变化时间
+  // 鍘熷鍊煎彉鍖栵紝璁板綍鍙樺寲鏃堕棿
   if (raw != db->raw_state)
   {
     db->raw_state = raw;
     db->last_change_ms = now_ms;
   }
 
-  // 如果原始值已经持续稳定超过 DEBOUNCE_MS，则更新稳定值
+  // 濡傛灉鍘熷鍊煎凡缁忔寔缁ǔ瀹氳秴杩?DEBOUNCE_MS锛屽垯鏇存柊绋冲畾鍊?
   if ((now_ms - db->last_change_ms) >= DEBOUNCE_MS)
   {
     db->last_stable_state = db->stable_state;
@@ -474,14 +480,14 @@ bool debounce_update(DebounceInput_t *db, bool raw, uint32_t now_ms)
   return db->stable_state;
 }
 
-// 检测稳定状态的上升沿
+// 妫€娴嬬ǔ瀹氱姸鎬佺殑涓婂崌娌?
 bool debounce_rising_edge(DebounceInput_t *db)
 {
   return (db->stable_state == true && db->last_stable_state == false);
 }
 
 // ============================================================
-// ROS2 订阅回调
+// ROS2 璁㈤槄鍥炶皟
 // ============================================================
 void start_auto_callback(const void *msgin)
 {
@@ -525,17 +531,17 @@ void manual_reverse_cmd_callback(const void *msgin)
 }
 
 // ============================================================
-// 自动流程控制
+// 鑷姩娴佺▼鎺у埗
 // ============================================================
-// 流程：
-// 1) 收到 start_auto
-// 2) 记录当前位置为 home
-// 3) 前进 0.1m 到目标点
-// 4) 到位后停车并发布 motion_reached
-// 5) 等待 detect_done
-// 6) 再前进 0.1m
-// 7) 重复直到达到总长度
-// 8) 然后反转回起点
+// 娴佺▼锛?
+// 1) 鏀跺埌 start_auto
+// 2) 璁板綍褰撳墠浣嶇疆涓?home
+// 3) 鍓嶈繘 0.1m 鍒扮洰鏍囩偣
+// 4) 鍒颁綅鍚庡仠杞﹀苟鍙戝竷 motion_reached
+// 5) 绛夊緟 detect_done
+// 6) 鍐嶅墠杩?0.1m
+// 7) 閲嶅鐩村埌杈惧埌鎬婚暱搴?
+// 8) 鐒跺悗鍙嶈浆鍥炶捣鐐?
 // ============================================================
 void start_auto_sequence()
 {
@@ -545,14 +551,10 @@ void start_auto_sequence()
   g_auto_state = AUTO_MOVING_FORWARD;
 
   g_auto_home_count = now_cnt;
-  g_auto_target_count = g_auto_home_count + AUTO_STEP_COUNTS;
-  g_auto_total_target_count = g_auto_home_count + AUTO_TOTAL_COUNTS;
-
-  // 防止第一步超过总目标
-  if (g_auto_target_count > g_auto_total_target_count)
-  {
-    g_auto_target_count = g_auto_total_target_count;
-  }
+  g_detect_origin_count = g_auto_home_count + AUTO_FIRST_DETECT_COUNTS;
+  g_auto_target_count = g_detect_origin_count;
+  g_auto_total_target_count = g_detect_origin_count + AUTO_TOTAL_COUNTS;
+  g_auto_waiting_first_detect = true;
 
   g_detect_done_cmd = false;
   g_motion_reached_event = false;
@@ -560,7 +562,7 @@ void start_auto_sequence()
   Serial.println("[AUTO] start sequence");
   Serial.print("[AUTO] home_count = ");
   Serial.println(g_auto_home_count);
-  Serial.print("[AUTO] first target = ");
+  Serial.print("[AUTO] detect origin = ");
   Serial.println(g_auto_target_count);
   Serial.print("[AUTO] total target = ");
   Serial.println(g_auto_total_target_count);
@@ -568,18 +570,15 @@ void start_auto_sequence()
 
 void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32_t encoder_now)
 {
-  // 默认停机，后面按状态决定是否动作
   *motor_enable = false;
   *motor_run = MOTOR_STOP;
 
-  // 收到开始命令且当前没在自动流程中 -> 启动
   if (g_start_auto_cmd && !g_auto_task_active)
   {
     g_start_auto_cmd = false;
     start_auto_sequence();
   }
 
-  // 当前没有自动任务 -> 保持空闲
   if (!g_auto_task_active)
   {
     g_auto_state = AUTO_IDLE;
@@ -590,42 +589,35 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
 
   switch (g_auto_state)
   {
-    // --------------------------------------------------------
-    // 状态1：前进中
-    // --------------------------------------------------------
     case AUTO_MOVING_FORWARD:
     {
       *motor_enable = true;
       *motor_run = MOTOR_FORWARD;
 
-      // 到达本段目标
       if (encoder_now >= g_auto_target_count)
       {
         *motor_enable = false;
         *motor_run = MOTOR_STOP;
-
-        // 产生一次“到位事件”
         g_motion_reached_event = true;
+        g_auto_state = AUTO_WAIT_DETECT_DONE;
 
-        // 如果已经达到总长度，开始回原点
-        if (g_auto_target_count >= g_auto_total_target_count)
+        if (g_auto_waiting_first_detect)
         {
-          g_auto_state = AUTO_RETURNING_HOME;
-          Serial.println("[AUTO] total length reached, return home");
+          g_auto_waiting_first_detect = false;
+          Serial.println("[AUTO] first detect origin reached, wait detect_done");
+        }
+        else if (g_auto_target_count >= g_auto_total_target_count)
+        {
+          Serial.println("[AUTO] final detect point reached, wait detect_done");
         }
         else
         {
-          // 否则等待检测完成
-          g_auto_state = AUTO_WAIT_DETECT_DONE;
           Serial.println("[AUTO] step reached, wait detect_done");
         }
       }
       break;
     }
 
-    // --------------------------------------------------------
-    // 状态2：等待检测完成
-    // --------------------------------------------------------
     case AUTO_WAIT_DETECT_DONE:
     {
       *motor_enable = false;
@@ -635,26 +627,27 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
       {
         g_detect_done_cmd = false;
 
-        // 下一个目标点 = 当前目标 + 一个步长
-        g_auto_target_count += AUTO_STEP_COUNTS;
-
-        // 不能超过总终点
-        if (g_auto_target_count > g_auto_total_target_count)
+        if (g_auto_target_count >= g_auto_total_target_count)
         {
-          g_auto_target_count = g_auto_total_target_count;
+          g_auto_state = AUTO_RETURNING_HOME;
+          Serial.println("[AUTO] detect done at final point, return home");
         }
+        else
+        {
+          g_auto_target_count += AUTO_STEP_COUNTS;
+          if (g_auto_target_count > g_auto_total_target_count)
+          {
+            g_auto_target_count = g_auto_total_target_count;
+          }
 
-        g_auto_state = AUTO_MOVING_FORWARD;
-
-        Serial.print("[AUTO] detect done, next target = ");
-        Serial.println(g_auto_target_count);
+          g_auto_state = AUTO_MOVING_FORWARD;
+          Serial.print("[AUTO] detect done, next target = ");
+          Serial.println(g_auto_target_count);
+        }
       }
       break;
     }
 
-    // --------------------------------------------------------
-    // 状态3：反向回起点
-    // --------------------------------------------------------
     case AUTO_RETURNING_HOME:
     {
       *motor_enable = true;
@@ -666,6 +659,7 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
         *motor_run = MOTOR_STOP;
 
         g_auto_task_active = false;
+        g_auto_waiting_first_detect = false;
         g_auto_state = AUTO_FINISHED;
 
         Serial.println("[AUTO] returned home, finished");
@@ -673,9 +667,6 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
       break;
     }
 
-    // --------------------------------------------------------
-    // 状态4：完成 / 异常兜底
-    // --------------------------------------------------------
     case AUTO_FINISHED:
     default:
     {
@@ -687,11 +678,11 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
 }
 
 // ============================================================
-// 初始化 IO
+// 鍒濆鍖?IO
 // ============================================================
 bool init_io()
 {
-  // 普通输入输出
+  // 鏅€氳緭鍏ヨ緭鍑?
   pinMode(MODE_TOGGLE_IN_PIN, INPUT_PULLDOWN);
   pinMode(MODE_OUT_PIN, OUTPUT);
 
@@ -703,26 +694,26 @@ bool init_io()
   pinMode(MANUAL_REVERSE_BTN_PIN, INPUT_PULLDOWN);
 
   // ----------------------------------------------------------
-  // 编码器输入
-  // NPN型编码器建议外部上拉到 3.3V
-  // 这里先用 INPUT_PULLUP 方便测试
-  // 正式工程仍建议使用外部上拉电阻
+  // 缂栫爜鍣ㄨ緭鍏?
+  // NPN鍨嬬紪鐮佸櫒寤鸿澶栭儴涓婃媺鍒?3.3V
+  // 杩欓噷鍏堢敤 INPUT_PULLUP 鏂逛究娴嬭瘯
+  // 姝ｅ紡宸ョ▼浠嶅缓璁娇鐢ㄥ閮ㄤ笂鎷夌數闃?
   // ----------------------------------------------------------
   pinMode(ENCODER_A_PIN, INPUT_PULLUP);
   pinMode(ENCODER_B_PIN, INPUT_PULLUP);
   pinMode(ENCODER_Z_PIN, INPUT_PULLUP);
 
-  // 初始化编码器状态
+  // 鍒濆鍖栫紪鐮佸櫒鐘舵€?
   reset_encoder_count(0);
 
-  // A/B 相双边沿中断
+  // A/B 鐩稿弻杈规部涓柇
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoder_isr, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN), encoder_isr, CHANGE);
 
-  // 上电默认：自动模式、继电器断开、电机停止
-  digitalWrite(MODE_OUT_PIN, LOW);       // 自动模式
-  digitalWrite(MOTOR_ENABLE_PIN, LOW);   // 电机断电
-  digitalWrite(MOTOR_DIR_PIN_A, HIGH);   // 不同电平表示停机
+  // 涓婄數榛樿锛氳嚜鍔ㄦā寮忋€佺户鐢靛櫒鏂紑銆佺數鏈哄仠姝?
+  digitalWrite(MODE_OUT_PIN, LOW);       // 鑷姩妯″紡
+  digitalWrite(MOTOR_ENABLE_PIN, LOW);   // 鐢垫満鏂數
+  digitalWrite(MOTOR_DIR_PIN_A, HIGH);   // 涓嶅悓鐢靛钩琛ㄧず鍋滄満
   digitalWrite(MOTOR_DIR_PIN_B, LOW);
 
   Serial.println("[IO] init done");
@@ -737,7 +728,7 @@ bool init_io()
 }
 
 // ============================================================
-// 初始化以太网
+// 鍒濆鍖栦互澶綉
 // ============================================================
 bool init_ethernet()
 {
@@ -779,7 +770,7 @@ bool check_agent_alive()
 }
 
 // ============================================================
-// 创建 micro-ROS 实体
+// 鍒涘缓 micro-ROS 瀹炰綋
 // ============================================================
 bool create_microros_entities()
 {
@@ -810,7 +801,7 @@ bool create_microros_entities()
   RCCHECK(rclc_node_init_default(&node, "esp32_fixed_controller_node", "", &support));
 
   // ----------------------------------------------------------
-  // 发布器
+  // 鍙戝竷鍣?
   // ----------------------------------------------------------
   RCCHECK(rclc_publisher_init_default(
       &motor_enable_pub,
@@ -861,7 +852,7 @@ bool create_microros_entities()
       "/fixed_controller/travel_m"));
 
   // ----------------------------------------------------------
-  // 订阅器
+  // 璁㈤槄鍣?
   // ----------------------------------------------------------
   RCCHECK(rclc_subscription_init_default(
       &start_auto_sub,
@@ -938,7 +929,7 @@ bool create_microros_entities()
 }
 
 // ============================================================
-// 销毁 micro-ROS 实体
+// 閿€姣?micro-ROS 瀹炰綋
 // ============================================================
 void destroy_microros_entities()
 {
@@ -1038,13 +1029,13 @@ void destroy_microros_entities()
 }
 
 // ============================================================
-// IO控制任务
-// 负责：
-// 1) 按键采样与消抖
-// 2) 手动/自动模式切换
-// 3) 自动状态机控制
-// 4) 控制电机输出
-// 5) 更新共享状态
+// IO鎺у埗浠诲姟
+// 璐熻矗锛?
+// 1) 鎸夐敭閲囨牱涓庢秷鎶?
+// 2) 鎵嬪姩/鑷姩妯″紡鍒囨崲
+// 3) 鑷姩鐘舵€佹満鎺у埗
+// 4) 鎺у埗鐢垫満杈撳嚭
+// 5) 鏇存柊鍏变韩鐘舵€?
 // ============================================================
 void io_control_task(void *parameter)
 {
@@ -1058,14 +1049,14 @@ void io_control_task(void *parameter)
     uint32_t now_ms = millis();
 
     // --------------------------------------------------------
-    // 原始输入采样
+    // 鍘熷杈撳叆閲囨牱
     // --------------------------------------------------------
     bool mode_toggle_raw = (digitalRead(MODE_TOGGLE_IN_PIN) == HIGH);
     bool btn_fwd_raw = (digitalRead(MANUAL_FORWARD_BTN_PIN) == HIGH);
     bool btn_rev_raw = (digitalRead(MANUAL_REVERSE_BTN_PIN) == HIGH);
 
     // --------------------------------------------------------
-    // 消抖处理
+    // 娑堟姈澶勭悊
     // --------------------------------------------------------
     bool mode_toggle_stable = debounce_update(&g_mode_toggle_db, mode_toggle_raw, now_ms);
     bool btn_fwd_stable = debounce_update(&g_btn_forward_db, btn_fwd_raw, now_ms);
@@ -1077,7 +1068,7 @@ void io_control_task(void *parameter)
 
     ControllerState_t local_state;
 
-    // 先取共享状态
+    // 鍏堝彇鍏变韩鐘舵€?
     if (xSemaphoreTake(ctrl_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
     {
       local_state = g_ctrl_state;
@@ -1090,7 +1081,7 @@ void io_control_task(void *parameter)
     }
 
     // --------------------------------------------------------
-    // 1) 模式切换按键：稳定上升沿翻转模式
+    // 1) 妯″紡鍒囨崲鎸夐敭锛氱ǔ瀹氫笂鍗囨部缈昏浆妯″紡
     // --------------------------------------------------------
     if (mode_toggle_stable && mode_toggle_rising)
     {
@@ -1099,10 +1090,11 @@ void io_control_task(void *parameter)
       Serial.print("[MODE] toggled -> ");
       Serial.println(local_state.manual_mode ? "MANUAL" : "AUTO");
 
-      // 切到手动时，强制退出自动流程
+      // 鍒囧埌鎵嬪姩鏃讹紝寮哄埗閫€鍑鸿嚜鍔ㄦ祦绋?
       if (local_state.manual_mode)
       {
         g_auto_task_active = false;
+        g_auto_waiting_first_detect = false;
         g_auto_state = AUTO_IDLE;
         g_start_auto_cmd = false;
         g_detect_done_cmd = false;
@@ -1110,8 +1102,8 @@ void io_control_task(void *parameter)
     }
 
     // --------------------------------------------------------
-    // 2) 模式输出 GPIO15
-    // LOW=自动，HIGH=手动
+    // 2) 妯″紡杈撳嚭 GPIO15
+    // LOW=鑷姩锛孒IGH=鎵嬪姩
     // --------------------------------------------------------
     if (g_remote_manual_mode_pending)
     {
@@ -1121,6 +1113,7 @@ void io_control_task(void *parameter)
       if (local_state.manual_mode)
       {
         g_auto_task_active = false;
+        g_auto_waiting_first_detect = false;
         g_auto_state = AUTO_IDLE;
         g_start_auto_cmd = false;
         g_detect_done_cmd = false;
@@ -1135,7 +1128,7 @@ void io_control_task(void *parameter)
     digitalWrite(MODE_OUT_PIN, local_state.manual_mode ? HIGH : LOW);
 
     // --------------------------------------------------------
-    // 3) 更新按钮状态（用消抖后的稳定值）
+    // 3) 鏇存柊鎸夐挳鐘舵€侊紙鐢ㄦ秷鎶栧悗鐨勭ǔ瀹氬€硷級
     // --------------------------------------------------------
     const bool remote_forward_active = local_state.manual_mode && g_auto_forward_cmd;
     const bool remote_reverse_active = local_state.manual_mode && g_auto_reverse_cmd;
@@ -1146,14 +1139,14 @@ void io_control_task(void *parameter)
     local_state.btn_reverse = merged_reverse;
 
     // --------------------------------------------------------
-    // 4) 计算电机命令
+    // 4) 璁＄畻鐢垫満鍛戒护
     // --------------------------------------------------------
     bool motor_enable = false;
     MotorRunState_t motor_run = MOTOR_STOP;
 
     if (local_state.manual_mode)
     {
-      // 手动模式：按钮控制
+      // 鎵嬪姩妯″紡锛氭寜閽帶鍒?
       if (merged_forward && !merged_reverse)
       {
         motor_enable = true;
@@ -1174,28 +1167,29 @@ void io_control_task(void *parameter)
     }
     else
     {
-      // 自动模式：由自动流程状态机控制
+      // 鑷姩妯″紡锛氱敱鑷姩娴佺▼鐘舵€佹満鎺у埗
       process_auto_sequence(&motor_enable, &motor_run, encoder_now);
     }
 
     // --------------------------------------------------------
-    // 5) 输出电机使能
+    // 5) 杈撳嚭鐢垫満浣胯兘
     // --------------------------------------------------------
     digitalWrite(MOTOR_ENABLE_PIN, motor_enable ? HIGH : LOW);
 
     // --------------------------------------------------------
-    // 6) 输出电机方向
-    // 同高=正转，同低=反转，不同=停止
+    // 6) 杈撳嚭鐢垫満鏂瑰悜
+    // 鍚岄珮=姝ｈ浆锛屽悓浣?鍙嶈浆锛屼笉鍚?鍋滄
     // --------------------------------------------------------
     if (motor_run == MOTOR_FORWARD)
     {
-      digitalWrite(MOTOR_DIR_PIN_A, HIGH);
-      digitalWrite(MOTOR_DIR_PIN_B, HIGH);
+      // MOTOR_FORWARD now maps to the previous physical reverse relay state.
+      digitalWrite(MOTOR_DIR_PIN_A, LOW);
+      digitalWrite(MOTOR_DIR_PIN_B, LOW);
     }
     else if (motor_run == MOTOR_REVERSE)
     {
-      digitalWrite(MOTOR_DIR_PIN_A, LOW);
-      digitalWrite(MOTOR_DIR_PIN_B, LOW);
+      digitalWrite(MOTOR_DIR_PIN_A, HIGH);
+      digitalWrite(MOTOR_DIR_PIN_B, HIGH);
     }
     else
     {
@@ -1204,12 +1198,19 @@ void io_control_task(void *parameter)
     }
 
     // --------------------------------------------------------
-    // 7) 回写共享状态
+    // 7) 鍥炲啓鍏变韩鐘舵€?
     // --------------------------------------------------------
     local_state.motor_enable = motor_enable;
     local_state.motor_run = motor_run;
     local_state.encoder_count = encoder_now;
-    local_state.travel_m = (float)(encoder_now - g_auto_home_count) / COUNTS_PER_METER;
+    if (!local_state.manual_mode && g_auto_task_active && encoder_now > g_detect_origin_count)
+    {
+      local_state.travel_m = (float)(encoder_now - g_detect_origin_count) / COUNTS_PER_METER;
+    }
+    else
+    {
+      local_state.travel_m = 0.0f;
+    }
     local_state.auto_state = g_auto_state;
     local_state.update_ms = now_ms;
 
@@ -1224,11 +1225,11 @@ void io_control_task(void *parameter)
 }
 
 // ============================================================
-// micro-ROS任务
-// 负责：
-// 1) agent 连接/断线重连
-// 2) spin executor，处理订阅回调
-// 3) 周期发布状态
+// micro-ROS浠诲姟
+// 璐熻矗锛?
+// 1) agent 杩炴帴/鏂嚎閲嶈繛
+// 2) spin executor锛屽鐞嗚闃呭洖璋?
+// 3) 鍛ㄦ湡鍙戝竷鐘舵€?
 // ============================================================
 void micro_ros_task(void *parameter)
 {
@@ -1288,12 +1289,12 @@ void micro_ros_task(void *parameter)
         uint32_t now = millis();
 
         // ----------------------------------------------------
-        // 1) 处理订阅回调
+        // 1) 澶勭悊璁㈤槄鍥炶皟
         // ----------------------------------------------------
         RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
 
         // ----------------------------------------------------
-        // 2) 定期检测 agent 是否在线
+        // 2) 瀹氭湡妫€娴?agent 鏄惁鍦ㄧ嚎
         // ----------------------------------------------------
         if (now - last_ping_check_ms >= alive_check_period_ms)
         {
@@ -1309,7 +1310,7 @@ void micro_ros_task(void *parameter)
         }
 
         // ----------------------------------------------------
-        // 3) 周期发布状态
+        // 3) 鍛ㄦ湡鍙戝竷鐘舵€?
         // ----------------------------------------------------
         if (now - last_publish_ms >= publish_period_ms)
         {
@@ -1333,7 +1334,7 @@ void micro_ros_task(void *parameter)
             encoder_count_msg.data = local_state.encoder_count;
             travel_m_msg.data = local_state.travel_m;
 
-            // 到位事件：有事件时发布一次 true，随后清零
+            // 鍒颁綅浜嬩欢锛氭湁浜嬩欢鏃跺彂甯冧竴娆?true锛岄殢鍚庢竻闆?
             motion_reached_msg.data = g_motion_reached_event;
             g_motion_reached_event = false;
 
@@ -1457,3 +1458,4 @@ void setup()
 void loop()
 {
 }
+
