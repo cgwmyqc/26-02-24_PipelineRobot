@@ -1,0 +1,42 @@
+services:
+  roscore:
+    image: ros:noetic-ros-core-focal
+    container_name: roscore
+    network_mode: host
+    command: bash -c "source /opt/ros/noetic/setup.bash && roscore"
+
+  ros2_humble:
+    image: ros:humble-ros-base-jammy
+    container_name: ros2_humble
+    network_mode: host
+    environment:
+      ROS_DOMAIN_ID: 0
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      ROS_LOCALHOST_ONLY: 0
+    command: >
+      bash -c "
+      source /opt/ros/humble/setup.bash &&
+      tail -f /dev/null
+      "
+
+  ros1_bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ros1_bridge_old
+    network_mode: host
+    depends_on:
+      - roscore
+    environment:
+      ROS_MASTER_URI: http://127.0.0.1:11311
+      ROS_DOMAIN_ID: 0
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      FASTDDS_BUILTIN_TRANSPORTS: UDPv4
+      ROS_LOCALHOST_ONLY: 0
+    command: >
+      bash -c "
+      source /opt/ros/noetic/setup.bash &&
+      source /opt/ros2_humble_ws/install/setup.bash &&
+      source /opt/bridge_ws/install/setup.bash &&
+      ros2 run ros1_bridge dynamic_bridge --bridge-all-topics
+      "
