@@ -8,6 +8,7 @@ RUN apt-get update \
 
 COPY scripts/start.sh /usr/local/bin/start-web-ros2-bridge.sh
 
-RUN chmod +x /usr/local/bin/start-web-ros2-bridge.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start-web-ros2-bridge.sh \
+    && chmod +x /usr/local/bin/start-web-ros2-bridge.sh
 
 ENTRYPOINT ["/usr/local/bin/start-web-ros2-bridge.sh"]
