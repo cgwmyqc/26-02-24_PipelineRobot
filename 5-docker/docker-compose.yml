@@ -21,6 +21,8 @@ services:
       ROSBRIDGE_PORT: "${ROSBRIDGE_PORT:-9090}"
     ports:
       - "${ROSBRIDGE_PORT:-9090}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - pipeline_robot_net
 
@@ -68,22 +70,39 @@ services:
     container_name: ros1_camera_algo
     restart: unless-stopped
     environment:
-      ROS_MASTER_URI: "http://ros1_camera_algo:11311"
-      ROS_HOSTNAME: ros1_camera_algo
-      CAMERA_ALGO_START_COMMAND: "${CAMERA_ALGO_START_COMMAND:-}"
-    volumes:
-      - ./ros1-camera-algo/volumes/ros1_camera_ws:/opt/camera_ws
-    networks:
-      - pipeline_robot_net
+      ROS1_MASTER_HOST: "${ROS1_MASTER_HOST:-192.168.1.199}"
+      ROS_MASTER_URI: "http://127.0.0.1:11311"
+      ROS_HOSTNAME: "${ROS1_HOSTNAME:-127.0.0.1}"
+      HIK_RTSP_URL: "${HIK_RTSP_URL:-rtsp://test:hitzri123@192.168.1.64:554/Streaming/Channels/101}"
+      MID360_IP: "${MID360_IP:-192.168.1.20}"
+      MID360_HOST_IP: "${MID360_HOST_IP:-192.168.1.199}"
+      LIVOX_PUBLISH_FREQ: "${LIVOX_PUBLISH_FREQ:-10.0}"
+      LIVOX_XFER_FORMAT: "${LIVOX_XFER_FORMAT:-2}"
+      LIVOX_MULTI_TOPIC: "${LIVOX_MULTI_TOPIC:-0}"
+      CAMERA_FRAME_ID: "${CAMERA_FRAME_ID:-camera_link}"
+      LIVOX_FRAME_ID: "${LIVOX_FRAME_ID:-livox_frame}"
+    network_mode: "${ROS1_CAMERA_NETWORK_MODE:-host}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "source /opt/ros/noetic/setup.bash && export ROS_MASTER_URI=http://127.0.0.1:11311 && rostopic info /camera/image >/dev/null 2>&1 && rostopic info /livox/lidar >/dev/null 2>&1"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
 
   ros1_bridge:
     build:
       context: ./ros1-ros2-bridge
     container_name: ros1_bridge
     depends_on:
-      - ros1_camera_algo
+      ros1_camera_algo:
+        condition: service_healthy
     environment:
-      ROS_MASTER_URI: "http://ros1_camera_algo:11311"
+      ROS1_MASTER_HOST: "${ROS1_MASTER_HOST:-192.168.1.199}"
+      ROS_MASTER_URI: "http://127.0.0.1:11311"
       ROS1_INSTALL_PATH: /opt/ros/noetic
       ROS2_INSTALL_PATH: /opt/ros2_humble_ws/install
       ROS1_BRIDGE_COMMAND: "${ROS1_BRIDGE_COMMAND:-ros2 run ros1_bridge dynamic_bridge}"
@@ -92,8 +111,8 @@ services:
       FASTDDS_BUILTIN_TRANSPORTS: UDPv4
       ROS_LOCALHOST_ONLY: 0
     command: ["ros2", "run", "ros1_bridge", "dynamic_bridge"]
-    networks:
-      - pipeline_robot_net
+    network_mode: host
+
 networks:
   pipeline_robot_net:
     driver: bridge
