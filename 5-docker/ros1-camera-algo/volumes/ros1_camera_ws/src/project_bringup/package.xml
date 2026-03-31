@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>project_bringup</name>
+  <version>0.0.1</version>
+  <description>Project bringup package for Hikvision camera and Livox MID360.</description>
+
+  <maintainer email="admin@example.com">admin</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>ipcamera_driver</depend>
+  <depend>livox_ros_driver2</depend>
+  <depend>roslaunch</depend>
+</package>
