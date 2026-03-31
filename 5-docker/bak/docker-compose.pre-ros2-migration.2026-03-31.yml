@@ -1,0 +1,121 @@
+name: pipeline_robot
+
+services:
+  micro_ros_agent:
+    build:
+      context: ./micro-ros-agent
+    container_name: micro_ros_agent
+    restart: unless-stopped
+    command: ["udp4", "--port", "8888", "-v6"]
+    ports:
+      - "${MICRO_ROS_AGENT_PORT:-8888}:8888/udp"
+    networks:
+      - pipeline_robot_net
+
+  web_ros2_bridge:
+    build:
+      context: ./web-ros2-bridge
+    container_name: web_ros2_bridge
+    restart: unless-stopped
+    environment:
+      ROSBRIDGE_PORT: "${ROSBRIDGE_PORT:-9090}"
+    ports:
+      - "${ROSBRIDGE_PORT:-9090}:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - pipeline_robot_net
+
+  mysql:
+    build:
+      context: ./mysql
+    container_name: pipeline_robot_mysql
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-root}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-pipeline_robot}"
+      MYSQL_USER: "${MYSQL_USER:-dev}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-123456}"
+      TZ: "${TZ:-Asia/Shanghai}"
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - pipeline_robot_mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "127.0.0.1",
+          "-uroot",
+          "-p${MYSQL_ROOT_PASSWORD:-root}"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - pipeline_robot_net
+
+  ros1_camera_algo:
+    build:
+      context: ./ros1-camera-algo
+    container_name: ros1_camera_algo
+    restart: unless-stopped
+    environment:
+      ROS1_MASTER_HOST: "${ROS1_MASTER_HOST:-192.168.1.199}"
+      ROS_MASTER_URI: "http://127.0.0.1:11311"
+      ROS_HOSTNAME: "${ROS1_HOSTNAME:-127.0.0.1}"
+      HIK_RTSP_URL: "${HIK_RTSP_URL:-rtsp://test:hitzri123@192.168.1.64:554/Streaming/Channels/101}"
+      MID360_IP: "${MID360_IP:-192.168.1.20}"
+      MID360_HOST_IP: "${MID360_HOST_IP:-192.168.1.199}"
+      LIVOX_PUBLISH_FREQ: "${LIVOX_PUBLISH_FREQ:-10.0}"
+      LIVOX_XFER_FORMAT: "${LIVOX_XFER_FORMAT:-2}"
+      LIVOX_MULTI_TOPIC: "${LIVOX_MULTI_TOPIC:-0}"
+      CAMERA_FRAME_ID: "${CAMERA_FRAME_ID:-camera_link}"
+      LIVOX_FRAME_ID: "${LIVOX_FRAME_ID:-livox_frame}"
+    network_mode: "${ROS1_CAMERA_NETWORK_MODE:-host}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "source /opt/ros/noetic/setup.bash && export ROS_MASTER_URI=http://127.0.0.1:11311 && rostopic info /camera/image >/dev/null 2>&1 && rostopic info /livox/lidar >/dev/null 2>&1"
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  ros1_bridge:
+    build:
+      context: ./ros1-ros2-bridge
+    container_name: ros1_bridge
+    depends_on:
+      ros1_camera_algo:
+        condition: service_healthy
+    environment:
+      ROS1_MASTER_HOST: "${ROS1_MASTER_HOST:-192.168.1.199}"
+      ROS_MASTER_URI: "http://127.0.0.1:11311"
+      ROS1_INSTALL_PATH: /opt/ros/noetic
+      ROS2_INSTALL_PATH: /opt/ros2_humble_ws/install
+      ROS1_BRIDGE_COMMAND: "${ROS1_BRIDGE_COMMAND:-ros2 run ros1_bridge dynamic_bridge}"
+      ROS_DOMAIN_ID: 0
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+      FASTDDS_BUILTIN_TRANSPORTS: UDPv4
+      ROS_LOCALHOST_ONLY: 0
+    command: ["ros2", "run", "ros1_bridge", "dynamic_bridge"]
+    network_mode: host
+
+networks:
+  pipeline_robot_net:
+    driver: bridge
+
+volumes:
+  pipeline_robot_mysql_data:
