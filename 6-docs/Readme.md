@@ -139,3 +139,23 @@ ros2 launch livox_ros_driver2 rviz_MID360_launch.py
 
 ros2 launch ros2_ipcamera ipcamera.launch.py
 /ipcamera/image_raw
+
+### Web UI 稳态流
+
+原始话题继续给算法使用：
+
+- `/ipcamera/image_raw`
+- `/livox/lidar`
+
+Web 页面建议改为订阅 UI 专用话题：
+
+- `/web_ui/video_frame`
+- `/web_ui/point_cloud`
+
+启动 UI 数据处理节点：
+
+```bash
+cd ~/Working/26-02-24_PipelineRobot/5-docker/web-ui-stream-node
+chmod +x start.sh
+./start.sh
+```

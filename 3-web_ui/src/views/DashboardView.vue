@@ -45,7 +45,11 @@
       </section>
 
       <section class="dashboard-aside">
-        <VideoPanel :frame="videoFrame" :connected="rosConnected" />
+        <VideoPanel
+          :frame="videoFrameUrl"
+          :active="videoStreamActive"
+          :connected="rosConnected"
+        />
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
           <div class="panel-body point-panel-body">
@@ -92,7 +96,8 @@ const {
   motorRunState,
   motionReached,
   rosConnected,
-  videoFrame,
+  videoFrameUrl,
+  videoStreamActive,
   historyList,
   historyLoading,
   historyFilters,

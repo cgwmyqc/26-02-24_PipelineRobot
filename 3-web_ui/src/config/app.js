@@ -62,12 +62,12 @@ export const appConfig = {
       messageType: 'std_msgs/msg/Bool'
     },
     pointCloud: {
-      name: '/robot/point_cloud_preview',
-      messageType: 'std_msgs/msg/Float32MultiArray'
+      name: '/web_ui/point_cloud',
+      messageType: 'sensor_msgs/msg/PointCloud2'
     },
     videoStream: {
-      name: '/robot/video_frame_base64',
-      messageType: 'std_msgs/msg/String'
+      name: '/web_ui/video_frame',
+      messageType: 'sensor_msgs/msg/CompressedImage'
     }
   }
 }
