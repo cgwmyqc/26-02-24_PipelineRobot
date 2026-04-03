@@ -130,3 +130,12 @@ mysql> SELECT user, host FROM mysql.user;
 Lidar：192.168.1.20
 
 上位机：192.168.1.132
+
+
+
+### 启动节点
+ros2 launch livox_ros_driver2 rviz_MID360_launch.py
+/livox/lidar
+
+ros2 launch ros2_ipcamera ipcamera.launch.py
+/ipcamera/image_raw
