@@ -152,7 +152,9 @@ export const useDashboardStore = defineStore('dashboard', {
     encoderCount: 0,
     travelMeters: 0,
     motionReached: false,
-    videoFrame: '',
+    videoFrameUrl: '',
+    videoStreamActive: false,
+    videoLastMessageAt: 0,
     historyList: [],
     historyLoading: false,
     historyFilters: {
@@ -170,17 +172,49 @@ export const useDashboardStore = defineStore('dashboard', {
     detailLoading: false,
     detailRecord: null,
     exportingId: null,
-    pointCloudPoints: buildMockPoints()
+    pointCloudPoints: buildMockPoints(),
+    pointCloudStreamActive: false,
+    pointCloudLastMessageAt: 0
   }),
   actions: {
     setRosConnected(status) {
       this.rosConnected = status
     },
-    setVideoFrame(frame) {
-      this.videoFrame = frame
+    setVideoFrameUrl(frameUrl) {
+      this.videoFrameUrl = frameUrl || ''
+    },
+    setVideoStreamActive(active) {
+      this.videoStreamActive = Boolean(active)
+      if (!active) {
+        this.videoFrameUrl = ''
+        this.videoLastMessageAt = 0
+      }
+    },
+    markVideoMessageReceived(timestamp = Date.now()) {
+      this.videoLastMessageAt = timestamp
+      this.videoStreamActive = true
     },
     setPointCloudPoints(points) {
       this.pointCloudPoints = Array.isArray(points) && points.length ? points : buildMockPoints()
+    },
+    setPointCloudStreamActive(active) {
+      this.pointCloudStreamActive = Boolean(active)
+      if (!active) {
+        this.pointCloudPoints = buildMockPoints()
+        this.pointCloudLastMessageAt = 0
+      }
+    },
+    markPointCloudMessageReceived(timestamp = Date.now()) {
+      this.pointCloudLastMessageAt = timestamp
+      this.pointCloudStreamActive = true
+    },
+    resetRealtimeStreams() {
+      this.videoFrameUrl = ''
+      this.videoStreamActive = false
+      this.videoLastMessageAt = 0
+      this.pointCloudStreamActive = false
+      this.pointCloudLastMessageAt = 0
+      this.pointCloudPoints = buildMockPoints()
     },
     setPatrolModeByState(isManual) {
       this.patrolMode = normalizeMode(isManual)

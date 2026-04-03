@@ -33,14 +33,21 @@ class RosService {
 
   getTopic(config) {
     this.ensureConnection()
-    const key = `${config.name}:${config.messageType}`
+    const key = JSON.stringify({
+      name: config.name,
+      messageType: config.messageType,
+      compression: config.compression || 'none',
+      throttleRate: config.throttleRate || 0
+    })
     if (!this.topicCache.has(key)) {
       this.topicCache.set(
         key,
         new ROSLIB.Topic({
           ros: this.ros,
           name: config.name,
-          messageType: config.messageType
+          messageType: config.messageType,
+          compression: config.compression || 'none',
+          throttle_rate: config.throttleRate || 0
         })
       )
     }

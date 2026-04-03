@@ -23,13 +23,81 @@ let frameId
 let initRetryId
 let resizeObserver
 let pointCloud
+let pointGeometry
+let pointMaterial
 let gridHelper
 let axesHelper
+let hasFramedPointCloud = false
 
 function getContainerSize() {
   const width = container.value?.clientWidth || 0
   const height = container.value?.clientHeight || 0
   return { width, height }
+}
+
+function getColorComponents(zValue) {
+  const ratio = Math.min(1, Math.abs(zValue) / 8)
+  return [
+    0.12 + ratio * 0.45,
+    0.62 + ratio * 0.24,
+    0.24 + ratio * 0.32
+  ]
+}
+
+function ensurePointAttributes(pointCount) {
+  if (!pointGeometry) {
+    return
+  }
+
+  const requiredLength = Math.max(pointCount * 3, 3)
+  const positionAttribute = pointGeometry.getAttribute('position')
+  const colorAttribute = pointGeometry.getAttribute('color')
+
+  if (!positionAttribute || positionAttribute.array.length < requiredLength) {
+    pointGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(requiredLength), 3))
+  }
+  if (!colorAttribute || colorAttribute.array.length < requiredLength) {
+    pointGeometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(requiredLength), 3))
+  }
+}
+
+function updatePoints() {
+  if (!pointGeometry) {
+    return
+  }
+
+  const pointCount = props.points.length
+  ensurePointAttributes(pointCount)
+
+  const positionAttribute = pointGeometry.getAttribute('position')
+  const colorAttribute = pointGeometry.getAttribute('color')
+  const positions = positionAttribute.array
+  const colors = colorAttribute.array
+
+  for (let index = 0; index < pointCount; index += 1) {
+    const offset = index * 3
+    const point = props.points[index]
+
+    positions[offset] = point.x
+    positions[offset + 1] = point.y
+    positions[offset + 2] = point.z
+
+    const [red, green, blue] = getColorComponents(point.z)
+    colors[offset] = red
+    colors[offset + 1] = green
+    colors[offset + 2] = blue
+  }
+
+  positionAttribute.needsUpdate = true
+  colorAttribute.needsUpdate = true
+  pointGeometry.setDrawRange(0, pointCount)
+  pointGeometry.computeBoundingBox()
+  pointGeometry.computeBoundingSphere()
+
+  if (!hasFramedPointCloud && pointCount > 0) {
+    framePointCloud()
+    hasFramedPointCloud = true
+  }
 }
 
 function createScene() {
@@ -66,56 +134,27 @@ function createScene() {
   axesHelper = new THREE.AxesHelper(10)
   scene.add(axesHelper)
 
-  buildPoints()
-}
-
-function buildPoints() {
-  if (!scene) {
-    return
-  }
-
-  const geometry = new THREE.BufferGeometry()
-  const positions = []
-  const colors = []
-
-  props.points.forEach((point) => {
-    positions.push(point.x, point.y, point.z)
-    const ratio = Math.min(1, Math.abs(point.z) / 8)
-    colors.push(0.12 + ratio * 0.45, 0.62 + ratio * 0.24, 0.24 + ratio * 0.32)
-  })
-
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-  geometry.computeBoundingBox()
-  geometry.computeBoundingSphere()
-
-  const material = new THREE.PointsMaterial({
+  pointGeometry = new THREE.BufferGeometry()
+  pointMaterial = new THREE.PointsMaterial({
     size: 0.34,
     sizeAttenuation: true,
     vertexColors: true
   })
-
-  if (pointCloud) {
-    scene.remove(pointCloud)
-    pointCloud.geometry.dispose()
-    pointCloud.material.dispose()
-  }
-
-  pointCloud = new THREE.Points(geometry, material)
+  pointCloud = new THREE.Points(pointGeometry, pointMaterial)
   scene.add(pointCloud)
-  framePointCloud()
+
+  updatePoints()
 }
 
 function framePointCloud() {
-  if (!pointCloud?.geometry?.boundingBox || !camera || !controls) {
+  if (!pointGeometry?.boundingBox || !camera || !controls) {
     return
   }
 
-  const box = pointCloud.geometry.boundingBox
   const center = new THREE.Vector3()
   const size = new THREE.Vector3()
-  box.getCenter(center)
-  box.getSize(size)
+  pointGeometry.boundingBox.getCenter(center)
+  pointGeometry.boundingBox.getSize(size)
 
   const radius = Math.max(size.length() * 0.6, 8)
   controls.target.copy(center)
@@ -181,10 +220,8 @@ function disposeScene() {
   cancelAnimationFrame(initRetryId)
   resizeObserver?.disconnect()
   controls?.dispose()
-  if (pointCloud) {
-    pointCloud.geometry.dispose()
-    pointCloud.material.dispose()
-  }
+  pointGeometry?.dispose()
+  pointMaterial?.dispose()
   renderer?.dispose()
   scene?.clear()
   if (renderer?.domElement?.parentNode) {
@@ -195,15 +232,18 @@ function disposeScene() {
   camera = null
   controls = null
   pointCloud = null
+  pointGeometry = null
+  pointMaterial = null
   gridHelper = null
   axesHelper = null
+  hasFramedPointCloud = false
 }
 
 watch(
   () => props.points,
   () => {
     if (scene) {
-      buildPoints()
+      updatePoints()
     }
   },
   { deep: true }
