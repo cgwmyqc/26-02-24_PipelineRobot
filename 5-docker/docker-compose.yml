@@ -26,17 +26,6 @@ services:
     networks:
       - pipeline_robot_net
 
-  ros2_livox_mid360:
-    build:
-      context: ./ros2-livox-mid360
-    container_name: ros2_livox_mid360
-    restart: unless-stopped
-    environment:
-      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
-      RMW_IMPLEMENTATION: "${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
-    network_mode: host
-    ipc: host
-
   mysql:
     build:
       context: ./mysql
