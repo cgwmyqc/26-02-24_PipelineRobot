@@ -3,6 +3,8 @@ const browserHost = window.location.hostname || 'localhost'
 export const appConfig = {
   backendBaseURL: import.meta.env.VITE_API_BASE_URL || `http://${browserHost}:8080/api`,
   rosbridgeUrl: import.meta.env.VITE_ROSBRIDGE_URL || `ws://${browserHost}:9090`,
+  webrtcStreamerUrl: import.meta.env.VITE_WEBRTC_STREAMER_URL || `http://${browserHost}:8000`,
+  webrtcStreamName: import.meta.env.VITE_WEBRTC_STREAM_NAME || 'inspection_camera',
   authStorageKey: 'pipeline-robot-auth',
   topics: {
     temperature: {
@@ -64,10 +66,6 @@ export const appConfig = {
     pointCloud: {
       name: '/web_ui/point_cloud',
       messageType: 'sensor_msgs/msg/PointCloud2'
-    },
-    videoStream: {
-      name: '/web_ui/video_frame',
-      messageType: 'sensor_msgs/msg/CompressedImage'
     }
   }
 }

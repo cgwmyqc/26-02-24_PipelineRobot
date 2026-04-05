@@ -57,8 +57,17 @@ npm run dev
 
 如果你的 ROS2 消息类型或话题名不同，直接修改配置即可。
 
+## 视频接入说明
+
+实时视频模块不再订阅 ROS2 `/web_ui/video_frame`。
+
+- 前端默认通过 `webrtc-streamer` 播放视频
+- `webrtc-streamer` 直接连接 RTSP 源
+- 可通过以下环境变量覆盖默认配置：
+  - `VITE_WEBRTC_STREAMER_URL`
+  - `VITE_WEBRTC_STREAM_NAME`
+
 ## 后续建议
 
-- 视频流如果是 `sensor_msgs/msg/Image`，建议在后端或 ROS 侧转成 Web 可消费的 MJPEG、WebRTC 或 HLS。
 - 点云如果是 `sensor_msgs/msg/PointCloud2`，建议增加后端解码或在前端补充 PointCloud2 解析。
 - 历史查询详情和导出按钮目前只保留界面，后续接业务接口。

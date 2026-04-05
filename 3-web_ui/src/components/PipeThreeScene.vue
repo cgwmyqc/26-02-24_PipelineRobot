@@ -5,49 +5,62 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import piperobotModelUrl from '../assets/models/piperobot.glb?url'
 
 const container = ref(null)
+const loader = new GLTFLoader()
+const FRESNEL_BASE_COLOR = new THREE.Color('#2dd6ff')
+const FRESNEL_EDGE_COLOR = new THREE.Color('#b8f7ff')
+const FRESNEL_BASE_OPACITY = 0.04
+const FRESNEL_POWER = 2.8
+const FRESNEL_EDGE_INTENSITY = 1.85
+
+const fresnelVertexShader = `
+  varying vec3 vWorldPosition;
+  varying vec3 vWorldNormal;
+
+  void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  }
+`
+
+const fresnelFragmentShader = `
+  uniform vec3 uBaseColor;
+  uniform vec3 uEdgeColor;
+  uniform float uBaseOpacity;
+  uniform float uFresnelPower;
+  uniform float uEdgeIntensity;
+  uniform vec3 uCameraPosition;
+
+  varying vec3 vWorldPosition;
+  varying vec3 vWorldNormal;
+
+  void main() {
+    vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
+    float fresnel = pow(1.0 - max(dot(normalize(vWorldNormal), viewDir), 0.0), uFresnelPower);
+    float edgeMix = clamp(fresnel * uEdgeIntensity, 0.0, 1.0);
+    vec3 color = mix(uBaseColor, uEdgeColor, edgeMix);
+    float alpha = clamp(uBaseOpacity + fresnel * 0.22, 0.0, 0.32);
+    gl_FragColor = vec4(color, alpha);
+  }
+`
+
 let renderer
 let scene
 let camera
 let controls
 let frameId
 let resizeObserver
-let pipeGroup
-
-function createInspectionCabin() {
-  const group = new THREE.Group()
-
-  const shell = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.05, 3.3, 32, 1, true),
-    new THREE.MeshPhysicalMaterial({
-      color: 0xe9f3f5,
-      transparent: true,
-      opacity: 0.92,
-      roughness: 0.16,
-      transmission: 0.05
-    })
-  )
-  group.add(shell)
-
-  const capMaterial = new THREE.MeshStandardMaterial({ color: 0x6edce4, metalness: 0.75, roughness: 0.25 })
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.18, 32), capMaterial)
-  top.position.y = 1.72
-  group.add(top)
-
-  const bottom = top.clone()
-  bottom.position.y = -1.72
-  group.add(bottom)
-
-  const core = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.72, 0.72, 2.9, 28),
-    new THREE.MeshStandardMaterial({ color: 0xfafdfd, metalness: 0.15, roughness: 0.6 })
-  )
-  group.add(core)
-
-  return group
-}
+let rootModel
+let ground
+let axesHelper
+let activeLoadToken = 0
+const fresnelMaterials = []
 
 function getContainerSize() {
   const width = container.value?.clientWidth || 0
@@ -59,8 +72,10 @@ function createScene() {
   scene = new THREE.Scene()
   scene.fog = new THREE.FogExp2(0x08111d, 0.035)
 
-  camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100)
-  camera.position.set(0, 7.4, 18)
+  camera = new THREE.PerspectiveCamera(35, 1, 0.1, 200)
+  // camera.position.set(0, 3.4, 10)
+  camera.position.set(0, 0, 0)
+
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -74,72 +89,26 @@ function createScene() {
   controls.enablePan = false
   controls.enableDamping = true
   controls.dampingFactor = 0.08
-  controls.minDistance = 8
-  controls.maxDistance = 30
+  controls.minDistance = 2.5
+  controls.maxDistance = 20
   controls.minPolarAngle = 0.45
   controls.maxPolarAngle = 2.25
-  controls.target.set(0, 1.2, 0)
+  controls.target.set(0, 0.8, 0)
 
-  scene.add(new THREE.AmbientLight(0x89d6ff, 1.8))
+  scene.add(new THREE.AmbientLight(0x89d6ff, 2.1))
 
-  const side = new THREE.PointLight(0x64f5d6, 24, 80)
+  const side = new THREE.PointLight(0x64f5d6, 28, 90)
   side.position.set(6, 8, 10)
   scene.add(side)
 
-  const fill = new THREE.PointLight(0x1659c0, 18, 80)
+  const fill = new THREE.PointLight(0x1659c0, 20, 90)
   fill.position.set(-8, 6, -8)
   scene.add(fill)
 
-  pipeGroup = new THREE.Group()
+  axesHelper = new THREE.AxesHelper(1.6)
+  scene.add(axesHelper)
 
-  const material = new THREE.MeshPhysicalMaterial({
-    color: 0x46dce6,
-    transparent: true,
-    opacity: 0.85,
-    roughness: 0.2,
-    transmission: 0.16
-  })
-
-  const mainPipe = new THREE.Mesh(new THREE.CylinderGeometry(2.25, 2.25, 13, 44, 1, true), material)
-  mainPipe.rotation.z = Math.PI / 2
-  pipeGroup.add(mainPipe)
-
-  const ringMaterial = new THREE.MeshStandardMaterial({ color: 0x33bec9, metalness: 0.8, roughness: 0.28 })
-  const leftRing = new THREE.Mesh(new THREE.TorusGeometry(2.25, 0.12, 16, 64), ringMaterial)
-  leftRing.position.x = -6.5
-  leftRing.rotation.y = Math.PI / 2
-  pipeGroup.add(leftRing)
-
-  const rightRing = leftRing.clone()
-  rightRing.position.x = 6.5
-  pipeGroup.add(rightRing)
-
-  const leftCabinPipe = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 4, 36, 1, true), material)
-  leftCabinPipe.position.set(-4.4, 2.7, 0)
-  pipeGroup.add(leftCabinPipe)
-
-  const rightCabinPipe = leftCabinPipe.clone()
-  rightCabinPipe.position.x = 4.4
-  pipeGroup.add(rightCabinPipe)
-
-  const leftCabin = createInspectionCabin()
-  leftCabin.position.set(-4.4, 5.8, 0)
-  pipeGroup.add(leftCabin)
-
-  const rightCabin = createInspectionCabin()
-  rightCabin.position.set(4.4, 5.8, 0)
-  pipeGroup.add(rightCabin)
-
-  const robot = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 0.5, 0.8),
-    new THREE.MeshStandardMaterial({ color: 0x84d8ff, emissive: 0x0d7fa2, emissiveIntensity: 0.65 })
-  )
-  robot.position.set(0, -0.6, 0)
-  pipeGroup.add(robot)
-
-  scene.add(pipeGroup)
-
-  const ground = new THREE.Mesh(
+  ground = new THREE.Mesh(
     new THREE.CircleGeometry(10, 64),
     new THREE.MeshBasicMaterial({
       color: 0x2ee4d4,
@@ -148,8 +117,137 @@ function createScene() {
     })
   )
   ground.rotation.x = -Math.PI / 2
-  ground.position.y = -3.6
+  ground.position.y = -2.2
   scene.add(ground)
+}
+
+function cloneRobotMaterial(material) {
+  if (!material) {
+    return material
+  }
+
+  const cloned = material.clone()
+  cloned.transparent = false
+  cloned.opacity = 1
+  cloned.depthWrite = true
+  cloned.needsUpdate = true
+  return cloned
+}
+
+function createFresnelMaterial() {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uBaseColor: { value: FRESNEL_BASE_COLOR.clone() },
+      uEdgeColor: { value: FRESNEL_EDGE_COLOR.clone() },
+      uBaseOpacity: { value: FRESNEL_BASE_OPACITY },
+      uFresnelPower: { value: FRESNEL_POWER },
+      uEdgeIntensity: { value: FRESNEL_EDGE_INTENSITY },
+      uCameraPosition: { value: new THREE.Vector3() }
+    },
+    vertexShader: fresnelVertexShader,
+    fragmentShader: fresnelFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  })
+
+  fresnelMaterials.push(material)
+  return material
+}
+
+function applyModelAppearance(model) {
+  model.traverse((object) => {
+    if (!object.isMesh) {
+      return
+    }
+
+    object.castShadow = false
+    object.receiveShadow = false
+
+    const isRobot = object.name === 'robot'
+    if (Array.isArray(object.material)) {
+      object.material = object.material.map((material) => (
+        isRobot ? cloneRobotMaterial(material) : createFresnelMaterial()
+      ))
+    } else {
+      object.material = isRobot
+        ? cloneRobotMaterial(object.material)
+        : createFresnelMaterial()
+    }
+  })
+}
+
+function frameModel(model) {
+  const box = new THREE.Box3().setFromObject(model)
+  if (box.isEmpty()) {
+    return
+  }
+
+  const center = box.getCenter(new THREE.Vector3())
+  const size = box.getSize(new THREE.Vector3())
+  const maxDimension = Math.max(size.x, size.y, size.z, 1)
+  const scale = 4.8 / maxDimension
+
+  model.scale.setScalar(scale)
+
+  const scaledBox = new THREE.Box3().setFromObject(model)
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3())
+  const scaledSize = scaledBox.getSize(new THREE.Vector3())
+
+  model.position.sub(scaledCenter)
+  model.position.y -= scaledBox.min.y + scaledSize.y * 0.08
+  model.rotation.y = -Math.PI / 2
+
+  const fittedBox = new THREE.Box3().setFromObject(model)
+  const fittedCenter = fittedBox.getCenter(new THREE.Vector3())
+  const fittedSize = fittedBox.getSize(new THREE.Vector3())
+  const target = fittedCenter.clone()
+  target.y = fittedBox.min.y + fittedSize.y * 0.34
+  const radius = Math.max(fittedSize.length() * 0.42, 2.5)
+
+  controls.target.copy(target)
+  camera.position.set(
+    target.x + radius * 1.55,
+    target.y + radius * 0.82,
+    target.z + radius * 1.55
+  )
+  controls.minDistance = Math.max(radius * 0.5, 2)
+  controls.maxDistance = Math.max(radius * 3.2, 8)
+  camera.near = 0.1
+  camera.far = Math.max(radius * 12, 80)
+  camera.updateProjectionMatrix()
+
+  if (ground) {
+    ground.position.y = fittedBox.min.y - 0.55
+  }
+  if (axesHelper) {
+    axesHelper.position.copy(target)
+  }
+
+  controls.update()
+}
+
+async function loadModel() {
+  const loadToken = ++activeLoadToken
+
+  try {
+    const gltf = await loader.loadAsync(piperobotModelUrl)
+    if (loadToken !== activeLoadToken || !scene) {
+      gltf.scene?.traverse?.((object) => {
+        if (object.geometry) {
+          object.geometry.dispose()
+        }
+      })
+      return
+    }
+
+    rootModel = gltf.scene
+    applyModelAppearance(rootModel)
+    scene.add(rootModel)
+    frameModel(rootModel)
+  } catch (error) {
+    console.error('[PipeThreeScene] failed to load piperobot.glb', error)
+  }
 }
 
 function updateRendererSize() {
@@ -170,6 +268,9 @@ function updateRendererSize() {
 
 function animate() {
   frameId = requestAnimationFrame(animate)
+  fresnelMaterials.forEach((material) => {
+    material.uniforms.uCameraPosition.value.copy(camera.position)
+  })
   controls?.update()
   renderer?.render(scene, camera)
 }
@@ -186,6 +287,7 @@ function initScene() {
 
   createScene()
   updateRendererSize()
+  loadModel()
   animate()
 }
 
@@ -198,19 +300,32 @@ function handleResize() {
 }
 
 function disposeScene() {
+  activeLoadToken += 1
   cancelAnimationFrame(frameId)
   resizeObserver?.disconnect()
   controls?.dispose()
-  renderer?.dispose()
+
+  if (rootModel?.parent) {
+    rootModel.parent.remove(rootModel)
+  }
+
   scene?.traverse((object) => {
     if (object.geometry) {
       object.geometry.dispose()
     }
     if (object.material) {
       const materials = Array.isArray(object.material) ? object.material : [object.material]
-      materials.forEach((material) => material?.dispose?.())
+      materials.forEach((material) => {
+        if (material?.map) {
+          material.map.dispose?.()
+        }
+        material?.dispose?.()
+      })
     }
   })
+  fresnelMaterials.splice(0).forEach((material) => material.dispose())
+
+  renderer?.dispose()
   scene?.clear()
   if (renderer?.domElement?.parentNode) {
     renderer.domElement.parentNode.removeChild(renderer.domElement)
@@ -219,7 +334,9 @@ function disposeScene() {
   scene = null
   camera = null
   controls = null
-  pipeGroup = null
+  rootModel = null
+  ground = null
+  axesHelper = null
 }
 
 onMounted(() => {

@@ -85,8 +85,8 @@
               :icon-src="mudheightImage"
               icon-alt="淤泥厚度"
               label="淤泥厚度"
-              value="--"
-              unit=""
+              value="0.0"
+              unit="cm"
             />
           </div>
         </div>
@@ -177,11 +177,15 @@ function toggleMove(direction, active) {
 
 <style scoped>
 .control-layout {
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 .control-stage {
   position: relative;
+  flex: 1;
+  height: auto;
   min-height: 430px;
   border-radius: 18px;
   overflow: hidden;
@@ -194,12 +198,13 @@ function toggleMove(direction, active) {
 }
 
 .overlay-layer {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
   display: grid;
   grid-template-rows: auto 1fr auto;
   gap: 16px;
-  min-height: 430px;
+  min-height: 0;
   padding: 16px;
   pointer-events: none;
 }

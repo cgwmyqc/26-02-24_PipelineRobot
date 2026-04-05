@@ -45,11 +45,7 @@
       </section>
 
       <section class="dashboard-aside">
-        <VideoPanel
-          :frame="videoFrameUrl"
-          :active="videoStreamActive"
-          :connected="rosConnected"
-        />
+        <VideoPanel />
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
           <div class="panel-body point-panel-body">
@@ -96,8 +92,6 @@ const {
   motorRunState,
   motionReached,
   rosConnected,
-  videoFrameUrl,
-  videoStreamActive,
   historyList,
   historyLoading,
   historyFilters,
@@ -128,14 +122,29 @@ function handleLogout() {
 <style scoped>
 .dashboard-page {
   min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-page > :deep(.app-header) {
+  flex: 0 0 auto;
+}
+
+.dashboard-page > .dashboard-shell {
+  flex: 1 1 auto;
+  min-height: 100vh;
+  min-height: 0;
 }
 
 .dashboard-shell {
   display: grid;
   grid-template-columns: minmax(0, 56.25fr) minmax(0, 43.75fr);
+  grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: 16px;
   padding: 0 18px 18px;
+  min-height: 0;
 }
 
 .dashboard-primary,
@@ -148,6 +157,7 @@ function handleLogout() {
 
 .dashboard-primary,
 .dashboard-aside {
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
 }
 
@@ -156,10 +166,16 @@ function handleLogout() {
 }
 
 .control-panel-shell {
-  min-height: 500px;
+  min-height: 400px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .control-panel-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   padding: 16px 18px 14px;
 }
 
@@ -169,7 +185,8 @@ function handleLogout() {
 }
 
 .dashboard-aside {
-  grid-template-rows: 420px minmax(0, 1fr);
+  /* grid-template-rows: 420px minmax(0, 1fr); */
+  grid-template-rows: 500px minmax(0, 1fr);
   height: 100%;
 }
 
@@ -200,6 +217,11 @@ function handleLogout() {
     grid-template-columns: 1fr;
   }
 
+  .dashboard-shell {
+    grid-template-rows: auto;
+  }
+
+  .dashboard-primary,
   .dashboard-aside {
     grid-template-rows: auto;
   }

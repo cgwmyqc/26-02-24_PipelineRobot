@@ -152,9 +152,6 @@ export const useDashboardStore = defineStore('dashboard', {
     encoderCount: 0,
     travelMeters: 0,
     motionReached: false,
-    videoFrameUrl: '',
-    videoStreamActive: false,
-    videoLastMessageAt: 0,
     historyList: [],
     historyLoading: false,
     historyFilters: {
@@ -180,20 +177,6 @@ export const useDashboardStore = defineStore('dashboard', {
     setRosConnected(status) {
       this.rosConnected = status
     },
-    setVideoFrameUrl(frameUrl) {
-      this.videoFrameUrl = frameUrl || ''
-    },
-    setVideoStreamActive(active) {
-      this.videoStreamActive = Boolean(active)
-      if (!active) {
-        this.videoFrameUrl = ''
-        this.videoLastMessageAt = 0
-      }
-    },
-    markVideoMessageReceived(timestamp = Date.now()) {
-      this.videoLastMessageAt = timestamp
-      this.videoStreamActive = true
-    },
     setPointCloudPoints(points) {
       this.pointCloudPoints = Array.isArray(points) && points.length ? points : buildMockPoints()
     },
@@ -209,9 +192,6 @@ export const useDashboardStore = defineStore('dashboard', {
       this.pointCloudStreamActive = true
     },
     resetRealtimeStreams() {
-      this.videoFrameUrl = ''
-      this.videoStreamActive = false
-      this.videoLastMessageAt = 0
       this.pointCloudStreamActive = false
       this.pointCloudLastMessageAt = 0
       this.pointCloudPoints = buildMockPoints()

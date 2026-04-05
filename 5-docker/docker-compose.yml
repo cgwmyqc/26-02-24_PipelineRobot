@@ -26,6 +26,22 @@ services:
     networks:
       - pipeline_robot_net
 
+  webrtc_streamer:
+    image: mpromonet/webrtc-streamer:master-amd64
+    container_name: webrtc_streamer
+    restart: unless-stopped
+    command:
+      - "-H"
+      - "0.0.0.0:${WEBRTC_STREAMER_PORT:-8000}"
+      - "-n"
+      - "${WEBRTC_STREAM_NAME:-inspection_camera}"
+      - "-u"
+      - "${HIK_RTSP_URL:-rtsp://test:hitzri123@192.168.1.64:554/Streaming/Channels/101}"
+    ports:
+      - "${WEBRTC_STREAMER_PORT:-8000}:${WEBRTC_STREAMER_PORT:-8000}"
+    networks:
+      - pipeline_robot_net
+
   mysql:
     build:
       context: ./mysql

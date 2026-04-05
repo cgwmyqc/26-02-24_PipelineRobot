@@ -2,13 +2,23 @@
   <section class="panel video-panel">
     <div class="panel-title">视频数据</div>
     <div class="panel-body video-body">
-      <img v-if="showLiveFrame" :src="frame" alt="巡检视频画面" class="video-image" />
-      <div v-else class="video-surface">
+      <video
+        ref="videoRef"
+        class="video-player"
+        :class="{ visible: status === 'playing' }"
+        autoplay
+        muted
+        playsinline
+        @playing="handlePlaying"
+        @loadeddata="handleLoadedData"
+        @error="handlePlaybackError"
+      ></video>
+      <div v-if="status !== 'playing'" class="video-surface">
         <div class="video-status-card">
           <div class="status-kicker">实时视频</div>
-          <div class="status-title">{{ connected ? '等待视频流接入' : 'ROS2 服务未连接' }}</div>
+          <div class="status-title">{{ statusTitle }}</div>
           <div class="status-description">
-            {{ connected ? '检测到 /ipcamera/image_raw 后会自动切换到实时画面。' : '请先确认 rosbridge 和相机节点已正常启动。' }}
+            {{ statusDescription }}
           </div>
           <button class="play-button" type="button" aria-label="播放提示按钮">
             <span class="play-icon"></span>
@@ -20,24 +30,172 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { appConfig } from '../config/app'
 
-const props = defineProps({
-  frame: {
-    type: String,
-    default: ''
-  },
-  active: {
-    type: Boolean,
-    default: false
-  },
-  connected: {
-    type: Boolean,
-    default: false
+const SCRIPT_LOADERS_KEY = '__webrtcStreamerScriptLoaders__'
+const videoRef = ref(null)
+const status = ref('connecting')
+
+let player = null
+let connectTimeoutId = 0
+
+function normalizeBaseUrl(url) {
+  return String(url || '').trim().replace(/\/+$/, '')
+}
+
+function loadRemoteScript(src) {
+  if (!window[SCRIPT_LOADERS_KEY]) {
+    window[SCRIPT_LOADERS_KEY] = new Map()
   }
+
+  const cached = window[SCRIPT_LOADERS_KEY].get(src)
+  if (cached) {
+    return cached
+  }
+
+  const loader = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[data-webrtc-src="${src}"]`)
+    if (existing) {
+      if (existing.dataset.loaded === 'true') {
+        resolve()
+        return
+      }
+
+      existing.addEventListener('load', () => resolve(), { once: true })
+      existing.addEventListener('error', () => reject(new Error(`load failed: ${src}`)), { once: true })
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = src
+    script.async = true
+    script.dataset.webrtcSrc = src
+    script.onload = () => {
+      script.dataset.loaded = 'true'
+      resolve()
+    }
+    script.onerror = () => reject(new Error(`load failed: ${src}`))
+    document.head.appendChild(script)
+  })
+
+  window[SCRIPT_LOADERS_KEY].set(src, loader)
+  return loader
+}
+
+async function ensureWebRtcStreamerScripts(baseUrl) {
+  await loadRemoteScript(`${baseUrl}/libs/adapter.min.js`)
+  await loadRemoteScript(`${baseUrl}/webrtcstreamer.js`)
+}
+
+function clearConnectTimeout() {
+  if (connectTimeoutId) {
+    window.clearTimeout(connectTimeoutId)
+    connectTimeoutId = 0
+  }
+}
+
+function disconnectPlayer() {
+  clearConnectTimeout()
+
+  if (player?.disconnect) {
+    player.disconnect()
+  }
+  player = null
+
+  if (videoRef.value?.srcObject) {
+    videoRef.value.srcObject.getTracks().forEach((track) => track.stop())
+    videoRef.value.srcObject = null
+  }
+}
+
+function handleLoadedData() {
+  if (status.value !== 'playing') {
+    status.value = 'playing'
+  }
+
+  videoRef.value?.play?.().catch(() => {})
+}
+
+function handlePlaying() {
+  clearConnectTimeout()
+  status.value = 'playing'
+}
+
+function handlePlaybackError() {
+  clearConnectTimeout()
+  status.value = 'error'
+}
+
+async function connectStream() {
+  const serverUrl = normalizeBaseUrl(appConfig.webrtcStreamerUrl)
+  const streamName = String(appConfig.webrtcStreamName || '').trim()
+
+  if (!serverUrl || !streamName) {
+    status.value = 'idle'
+    return
+  }
+
+  status.value = 'connecting'
+
+  try {
+    await ensureWebRtcStreamerScripts(serverUrl)
+
+    if (typeof window.WebRtcStreamer !== 'function') {
+      throw new Error('WebRtcStreamer is unavailable')
+    }
+
+    player = new window.WebRtcStreamer(videoRef.value, serverUrl)
+    player.onError = () => {
+      clearConnectTimeout()
+      status.value = 'error'
+    }
+    player.connect(streamName)
+
+    clearConnectTimeout()
+    connectTimeoutId = window.setTimeout(() => {
+      if (status.value !== 'playing') {
+        status.value = 'error'
+      }
+    }, 12000)
+  } catch (_error) {
+    status.value = 'error'
+  }
+}
+
+const statusTitle = computed(() => {
+  if (status.value === 'idle') {
+    return '未配置视频流'
+  }
+  if (status.value === 'error') {
+    return '视频连接失败'
+  }
+  if (status.value === 'connecting') {
+    return '正在建立视频连接'
+  }
+  return '实时视频已接入'
 })
 
-const showLiveFrame = computed(() => props.active && Boolean(props.frame))
+const statusDescription = computed(() => {
+  if (status.value === 'idle') {
+    return '请配置 WebRTC 服务地址和固定流名称后，再打开演示页面。'
+  }
+  if (status.value === 'error') {
+    return '请检查 webrtc-streamer 服务、RTSP 地址和浏览器网络连通性。'
+  }
+  if (status.value === 'connecting') {
+    return '页面正在通过 webrtc-streamer 连接巡检相机，请稍候。'
+  }
+  return '视频流已经建立，正在播放实时巡检画面。'
+})
+
+onMounted(() => {
+  connectStream()
+})
+
+onBeforeUnmount(() => {
+  disconnectPlayer()
+})
 </script>
 
 <style scoped>
@@ -52,9 +210,10 @@ const showLiveFrame = computed(() => props.active && Boolean(props.frame))
   flex: 1;
   min-height: 0;
   padding: 0;
+  position: relative;
 }
 
-.video-image,
+.video-player,
 .video-surface {
   width: 100%;
   height: 100%;
@@ -64,11 +223,19 @@ const showLiveFrame = computed(() => props.active && Boolean(props.frame))
     radial-gradient(circle at 50% 50%, rgba(120, 207, 255, 0.16), transparent 24%);
 }
 
-.video-image {
+.video-player {
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+.video-player.visible {
+  opacity: 1;
 }
 
 .video-surface {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
   padding: 28px;

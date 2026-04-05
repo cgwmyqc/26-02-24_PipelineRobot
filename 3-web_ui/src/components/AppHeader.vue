@@ -44,14 +44,16 @@ const headerStyle = computed(() => (
 <style scoped>
 .app-header {
   position: relative;
-  min-height: 85px;
+  height: clamp(96px, 10vw, 122px);
+  min-height: 96px;
+  padding-top: 10px;
   padding-bottom: 10px;
   overflow: hidden;
 }
 
 .header-image {
   position: absolute;
-  inset: 0 0 10px;
+  inset: 10px 0 10px;
   background:
     linear-gradient(90deg, rgba(4, 13, 24, 0.22), rgba(7, 18, 31, 0.08)),
     linear-gradient(180deg, rgba(7, 16, 30, 0.96), rgba(11, 24, 40, 0.78));
@@ -63,12 +65,13 @@ const headerStyle = computed(() => (
 .header-actions {
   position: relative;
   z-index: 1;
-  min-height: 85px;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  padding-right: 18px;
+  padding: 0 18px 0 18px;
+  min-height: 0;
 }
 
 .connection-chip,
@@ -110,11 +113,16 @@ const headerStyle = computed(() => (
 }
 
 @media (max-width: 1024px) {
+  .app-header {
+    height: auto;
+    min-height: 108px;
+  }
+
   .header-actions {
     flex-wrap: wrap;
     justify-content: flex-start;
     align-content: center;
-    padding: 10px 14px 0;
+    padding: 8px 14px 0;
   }
 }
 </style>

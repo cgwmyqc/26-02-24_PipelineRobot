@@ -4,7 +4,6 @@ import { useDashboardStore } from '../stores/dashboard'
 import { rosService } from '../services/ros'
 import { appConfig } from '../config/app'
 
-const VIDEO_TIMEOUT_MS = 2500
 const POINT_CLOUD_TIMEOUT_MS = 2500
 const MAX_POINT_CLOUD_POINTS = 5000
 const IS_DEV = import.meta.env.DEV
@@ -104,7 +103,6 @@ export function useRosDashboard() {
   const unsubscribers = []
   const uiPatrolMode = computed(() => pendingPatrolMode.value || patrolMode.value)
   let streamWatchdogId = 0
-  let hasLoggedVideoFrame = false
   let hasLoggedPointCloudFrame = false
 
   function publishManualMode(isManual) {
@@ -134,18 +132,8 @@ export function useRosDashboard() {
     rosService.publish(appConfig.topics.detectDone, { data: true })
   }
 
-  function clearVideoFrame() {
-    store.setVideoFrameUrl('')
-    store.setVideoStreamActive(false)
-  }
-
   function refreshStreamStates() {
     const now = Date.now()
-
-    if (store.videoLastMessageAt && now - store.videoLastMessageAt > VIDEO_TIMEOUT_MS) {
-      debugLog('video stream timed out')
-      clearVideoFrame()
-    }
 
     if (store.pointCloudLastMessageAt && now - store.pointCloudLastMessageAt > POINT_CLOUD_TIMEOUT_MS) {
       debugLog('point cloud stream timed out')
@@ -229,31 +217,6 @@ export function useRosDashboard() {
     )
 
     unsubscribers.push(
-      rosService.subscribe(appConfig.topics.videoStream, (message) => {
-        try {
-          if (typeof message?.data !== 'string' || !message.data) {
-            return
-          }
-
-          const format = String(message?.format || '').toLowerCase()
-          const mimeType = format.includes('png') ? 'image/png' : 'image/jpeg'
-          store.setVideoFrameUrl(`data:${mimeType};base64,${message.data}`)
-          store.markVideoMessageReceived()
-
-          if (!hasLoggedVideoFrame) {
-            debugLog('ui video frame received', {
-              format: message?.format,
-              payloadSize: message?.data?.length || 0
-            })
-            hasLoggedVideoFrame = true
-          }
-        } catch (_error) {
-          debugLog('video decode failed', _error)
-        }
-      })
-    )
-
-    unsubscribers.push(
       rosService.subscribe(appConfig.topics.pointCloud, (message) => {
         try {
           const points = decodePointCloud(message)
@@ -284,7 +247,6 @@ export function useRosDashboard() {
   onBeforeUnmount(() => {
     window.clearInterval(streamWatchdogId)
     unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe())
-    clearVideoFrame()
   })
 
   return {
