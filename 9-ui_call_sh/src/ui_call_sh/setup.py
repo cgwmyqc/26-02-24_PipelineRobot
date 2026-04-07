@@ -13,6 +13,7 @@ setup(
         (f'share/{package_name}', ['package.xml']),
         (f'share/{package_name}/launch', ['launch/ui_call_sh.launch.py']),
         (f'share/{package_name}/scripts', [
+            'scripts/test.sh',
             'scripts/triger_stop_capture.sh',
             'scripts/end_pipe_postprocess.sh',
         ]),

@@ -132,6 +132,15 @@ export function useRosDashboard() {
     rosService.publish(appConfig.topics.detectDone, { data: true })
   }
 
+  function publishUiScriptCommand(scriptName) {
+    const normalized = String(scriptName || '').trim()
+    if (!normalized) {
+      return
+    }
+
+    rosService.publish(appConfig.topics.uiCallScriptCmd, { data: normalized })
+  }
+
   function refreshStreamStates() {
     const now = Date.now()
 
@@ -254,6 +263,7 @@ export function useRosDashboard() {
     setPatrolMode,
     publishMoveCommand,
     startAutoInspection,
-    markDetectDone
+    markDetectDone,
+    publishUiScriptCommand
   }
 }

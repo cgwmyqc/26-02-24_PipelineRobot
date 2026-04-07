@@ -22,6 +22,7 @@
               :set-patrol-mode="setPatrolMode"
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
+              :publish-ui-script-command="publishUiScriptCommand"
             />
           </div>
         </div>
@@ -107,7 +108,8 @@ const {
   patrolMode: rosPatrolMode,
   setPatrolMode,
   publishMoveCommand,
-  startAutoInspection
+  startAutoInspection,
+  publishUiScriptCommand
 } = useRosDashboard()
 
 const uiPatrolMode = computed(() => rosPatrolMode.value || storePatrolMode.value)

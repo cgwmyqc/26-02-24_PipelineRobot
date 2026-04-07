@@ -6,64 +6,88 @@
       </div>
 
       <div class="overlay-layer">
-        <div class="mode-switch hud-panel">
-          <button
-            :class="['mode-btn', { active: patrolMode === 'auto' }]"
-            @click="setPatrolMode('auto')"
-          >
-            自动巡检
-          </button>
-          <button
-            :class="['mode-btn', { active: patrolMode === 'manual' }]"
-            @click="setPatrolMode('manual')"
-          >
-            人工巡检
-          </button>
+        <div class="control-settings">
+          <div class="mode-switch hud-panel">
+            <button
+              :class="['mode-btn', { active: patrolMode === 'auto' }]"
+              @click="setPatrolMode('auto')"
+            >
+              自动巡检
+            </button>
+            <button
+              :class="['mode-btn', { active: patrolMode === 'manual' }]"
+              @click="setPatrolMode('manual')"
+            >
+              人工巡检
+            </button>
+          </div>
+
+          <label class="test-switch hud-panel">
+            <span class="test-switch-label">测试模式</span>
+            <input v-model="testModeEnabled" type="checkbox" class="test-switch-input">
+            <span :class="['test-switch-track', { active: testModeEnabled }]">
+              <span class="test-switch-thumb" />
+            </span>
+          </label>
         </div>
 
         <div class="hud-grid">
-          <div class="motion-actions hud-panel hud-block">
-            <button
-              class="image-action-btn"
-              :class="{ inactive: !isManualMode }"
-              :disabled="!isManualMode"
-              @mousedown="toggleMove('forward', true)"
-              @mouseup="toggleMove('forward', false)"
-              @mouseleave="toggleMove('forward', false)"
-              @blur="toggleMove('forward', false)"
-              @touchstart.prevent="toggleMove('forward', true)"
-              @touchend.prevent="toggleMove('forward', false)"
-              @touchcancel.prevent="toggleMove('forward', false)"
-            >
-              <img v-if="forwardButtonImage" :src="forwardButtonImage" alt="前进">
-              <span v-else>前进</span>
-            </button>
+          <div class="action-groups">
+            <div class="motion-actions hud-panel hud-block">
+              <button
+                class="image-action-btn"
+                :class="{ inactive: !isManualMode }"
+                :disabled="!isManualMode"
+                @mousedown="toggleMove('forward', true)"
+                @mouseup="toggleMove('forward', false)"
+                @mouseleave="toggleMove('forward', false)"
+                @blur="toggleMove('forward', false)"
+                @touchstart.prevent="toggleMove('forward', true)"
+                @touchend.prevent="toggleMove('forward', false)"
+                @touchcancel.prevent="toggleMove('forward', false)"
+              >
+                <img v-if="forwardButtonImage" :src="forwardButtonImage" alt="前进">
+                <span v-else>前进</span>
+              </button>
 
-            <button
-              class="image-action-btn"
-              :class="{ inactive: !isManualMode }"
-              :disabled="!isManualMode"
-              @mousedown="toggleMove('reverse', true)"
-              @mouseup="toggleMove('reverse', false)"
-              @mouseleave="toggleMove('reverse', false)"
-              @blur="toggleMove('reverse', false)"
-              @touchstart.prevent="toggleMove('reverse', true)"
-              @touchend.prevent="toggleMove('reverse', false)"
-              @touchcancel.prevent="toggleMove('reverse', false)"
-            >
-              <img v-if="reverseButtonImage" :src="reverseButtonImage" alt="后退">
-              <span v-else>后退</span>
-            </button>
+              <button
+                class="image-action-btn"
+                :class="{ inactive: !isManualMode }"
+                :disabled="!isManualMode"
+                @mousedown="toggleMove('reverse', true)"
+                @mouseup="toggleMove('reverse', false)"
+                @mouseleave="toggleMove('reverse', false)"
+                @blur="toggleMove('reverse', false)"
+                @touchstart.prevent="toggleMove('reverse', true)"
+                @touchend.prevent="toggleMove('reverse', false)"
+                @touchcancel.prevent="toggleMove('reverse', false)"
+              >
+                <img v-if="reverseButtonImage" :src="reverseButtonImage" alt="后退">
+                <span v-else>后退</span>
+              </button>
 
-            <button
-              class="image-action-btn"
-              :class="{ inactive: !isAutoMode }"
-              :disabled="!isAutoMode"
-              @click="startAutoInspection"
-            >
-              <img v-if="startButtonImage" :src="startButtonImage" alt="开始自动巡检">
-              <span v-else>自动</span>
-            </button>
+              <button
+                class="image-action-btn"
+                :class="{ inactive: !isAutoMode }"
+                :disabled="!isAutoMode"
+                @click="startAutoInspection"
+              >
+                <img v-if="startButtonImage" :src="startButtonImage" alt="开始自动巡检">
+                <span v-else>自动</span>
+              </button>
+            </div>
+
+            <div v-if="testModeEnabled" class="test-actions hud-panel hud-block">
+              <button class="test-action-btn" @click="triggerTestScript('test.sh')">
+                开始测试
+              </button>
+              <button class="test-action-btn" @click="triggerTestScript('triger_stop_capture.sh')">
+                触发
+              </button>
+              <button class="test-action-btn" @click="triggerTestScript('end_pipe_postprocess.sh')">
+                测试完成
+              </button>
+            </div>
           </div>
 
           <div class="metrics hud-panel hud-block">
@@ -119,7 +143,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MetricCard from './MetricCard.vue'
 import PipeThreeScene from './PipeThreeScene.vue'
 import { resolveImageAsset } from '../utils/assets'
@@ -135,7 +159,8 @@ const props = defineProps({
   motionReached: Boolean,
   setPatrolMode: Function,
   publishMoveCommand: Function,
-  startAutoInspection: Function
+  startAutoInspection: Function,
+  publishUiScriptCommand: Function
 })
 
 const forwardActiveImage = resolveImageAsset('btn_fw_active')
@@ -150,6 +175,7 @@ const mudheightImage = resolveImageAsset('mudheight')
 
 const isManualMode = computed(() => props.patrolMode === 'manual')
 const isAutoMode = computed(() => props.patrolMode === 'auto')
+const testModeEnabled = ref(false)
 
 const directionLabel = computed(() => {
   if (props.motorRunState === 1) {
@@ -172,6 +198,10 @@ function toggleMove(direction, active) {
     return
   }
   props.publishMoveCommand?.(direction, active)
+}
+
+function triggerTestScript(scriptName) {
+  props.publishUiScriptCommand?.(scriptName)
 }
 </script>
 
@@ -209,12 +239,18 @@ function toggleMove(direction, active) {
   pointer-events: none;
 }
 
+.control-settings {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
 .hud-grid {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  align-items: center;
   gap: 16px;
+  min-height: 0;
 }
 
 .hud-panel {
@@ -226,8 +262,10 @@ function toggleMove(direction, active) {
 
 .hud-block,
 .mode-switch,
+.test-switch,
 .state-bar,
-.image-action-btn {
+.image-action-btn,
+.test-action-btn {
   pointer-events: auto;
 }
 
@@ -236,6 +274,57 @@ function toggleMove(direction, active) {
   width: fit-content;
   border-radius: 999px;
   overflow: hidden;
+}
+
+.test-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.test-switch-label {
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.test-switch-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.test-switch-track {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(140, 159, 178, 0.35);
+  transition: background 0.2s ease;
+}
+
+.test-switch-track.active {
+  background: linear-gradient(135deg, #88f1ba, #60f2df);
+}
+
+.test-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f7fffb;
+  box-shadow: 0 4px 12px rgba(3, 8, 15, 0.28);
+  transition: transform 0.2s ease;
+}
+
+.test-switch-track.active .test-switch-thumb {
+  transform: translateX(22px);
 }
 
 .mode-btn {
@@ -256,6 +345,13 @@ function toggleMove(direction, active) {
   font-weight: 700;
 }
 
+.action-groups {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+}
+
 .motion-actions {
   display: grid;
   flex: 0 0 78px;
@@ -264,6 +360,16 @@ function toggleMove(direction, active) {
   gap: 16px;
   min-height: 240px;
   padding: 16px 10px;
+  border-radius: 18px;
+}
+
+.test-actions {
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  min-height: 240px;
+  min-width: 132px;
+  padding: 16px 12px;
   border-radius: 18px;
 }
 
@@ -300,6 +406,26 @@ function toggleMove(direction, active) {
 .image-action-btn.inactive,
 .image-action-btn:disabled {
   cursor: not-allowed;
+}
+
+.test-action-btn {
+  min-width: 108px;
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid rgba(103, 212, 255, 0.24);
+  border-radius: 14px;
+  background: rgba(13, 27, 41, 0.92);
+  color: var(--brand);
+  font-size: 14px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.test-action-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(103, 212, 255, 0.42);
+  background: rgba(17, 36, 54, 0.96);
 }
 
 .metrics {
@@ -368,6 +494,10 @@ function toggleMove(direction, active) {
     width: 100%;
   }
 
+  .test-switch {
+    width: fit-content;
+  }
+
   .mode-btn {
     flex: 1;
     width: auto;
@@ -382,10 +512,25 @@ function toggleMove(direction, active) {
     display: grid;
   }
 
+  .action-groups {
+    flex-wrap: wrap;
+  }
+
   .motion-actions {
     grid-auto-flow: column;
     grid-template-columns: repeat(3, 53px);
     min-height: auto;
+  }
+
+  .test-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-height: auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .test-action-btn {
+    min-width: 0;
   }
 
   .metrics {

@@ -17,6 +17,7 @@ from std_msgs.msg import String
 TOPIC_NAME = 'ui_call_script_cmd'
 MAX_LOG_SNIPPET_CHARS = 400
 ALLOWED_SCRIPT_NAMES = (
+    'test.sh',
     'triger_stop_capture.sh',
     'end_pipe_postprocess.sh',
 )

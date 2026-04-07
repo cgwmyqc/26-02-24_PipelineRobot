@@ -63,6 +63,10 @@ export const appConfig = {
       name: '/fixed_controller/detect_done',
       messageType: 'std_msgs/msg/Bool'
     },
+    uiCallScriptCmd: {
+      name: '/ui_call_script_cmd',
+      messageType: 'std_msgs/msg/String'
+    },
     pointCloud: {
       name: '/web_ui/point_cloud',
       messageType: 'sensor_msgs/msg/PointCloud2'
