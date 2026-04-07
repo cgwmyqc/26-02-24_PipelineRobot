@@ -118,3 +118,10 @@ docker-data/
 # =========================================
 7-sonarDemo/build/
 7-sonarDemo/CMakeLists.txt.user
+
+
+# =========================================
+# 9-ui_call_sh
+# =========================================
+9-ui_call_sh/install
+9-ui_call_sh/log
