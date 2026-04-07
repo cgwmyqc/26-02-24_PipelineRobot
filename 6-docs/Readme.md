@@ -162,3 +162,8 @@ chmod +x start.sh
 
 
 这里是测试分支。
+
+
+路由器用户名密码
+用户名：admin
+密码：hitzri@1231

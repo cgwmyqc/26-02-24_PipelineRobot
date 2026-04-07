@@ -16,6 +16,11 @@ const FRESNEL_EDGE_COLOR = new THREE.Color('#b8f7ff')
 const FRESNEL_BASE_OPACITY = 0.04
 const FRESNEL_POWER = 2.8
 const FRESNEL_EDGE_INTENSITY = 1.85
+const MODEL_DISPLAY_SIZE = 4.8
+const TARGET_HEIGHT_RATIO = 0.34
+const CAMERA_X_OFFSET_FACTOR = 1.55
+const CAMERA_Y_OFFSET_FACTOR = 0.82
+const CAMERA_Z_OFFSET_FACTOR = 1.55
 
 const fresnelVertexShader = `
   varying vec3 vWorldPosition;
@@ -73,8 +78,7 @@ function createScene() {
   scene.fog = new THREE.FogExp2(0x08111d, 0.035)
 
   camera = new THREE.PerspectiveCamera(35, 1, 0.1, 200)
-  // camera.position.set(0, 3.4, 10)
-  camera.position.set(0, 0, 0)
+  camera.position.set(0, 3.4, 10)
 
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -183,33 +187,36 @@ function frameModel(model) {
     return
   }
 
-  const center = box.getCenter(new THREE.Vector3())
   const size = box.getSize(new THREE.Vector3())
   const maxDimension = Math.max(size.x, size.y, size.z, 1)
-  const scale = 4.8 / maxDimension
+  const scale = MODEL_DISPLAY_SIZE / maxDimension
 
   model.scale.setScalar(scale)
+  model.rotation.set(0, -Math.PI / 2, 0)
+  model.position.set(0, 0, 0)
 
-  const scaledBox = new THREE.Box3().setFromObject(model)
-  const scaledCenter = scaledBox.getCenter(new THREE.Vector3())
-  const scaledSize = scaledBox.getSize(new THREE.Vector3())
-
-  model.position.sub(scaledCenter)
-  model.position.y -= scaledBox.min.y + scaledSize.y * 0.08
-  model.rotation.y = -Math.PI / 2
+  const alignedBox = new THREE.Box3().setFromObject(model)
+  const alignedCenter = alignedBox.getCenter(new THREE.Vector3())
+  model.position.set(
+    0,
+    -alignedBox.min.y,
+    -alignedCenter.z
+  )
 
   const fittedBox = new THREE.Box3().setFromObject(model)
-  const fittedCenter = fittedBox.getCenter(new THREE.Vector3())
   const fittedSize = fittedBox.getSize(new THREE.Vector3())
-  const target = fittedCenter.clone()
-  target.y = fittedBox.min.y + fittedSize.y * 0.34
+  const target = new THREE.Vector3(
+    0,
+    fittedBox.min.y + fittedSize.y * TARGET_HEIGHT_RATIO,
+    0
+  )
   const radius = Math.max(fittedSize.length() * 0.42, 2.5)
 
   controls.target.copy(target)
   camera.position.set(
-    target.x + radius * 1.55,
-    target.y + radius * 0.82,
-    target.z + radius * 1.55
+    target.x + radius * CAMERA_X_OFFSET_FACTOR,
+    target.y + radius * CAMERA_Y_OFFSET_FACTOR,
+    target.z + radius * CAMERA_Z_OFFSET_FACTOR
   )
   controls.minDistance = Math.max(radius * 0.5, 2)
   controls.maxDistance = Math.max(radius * 3.2, 8)
