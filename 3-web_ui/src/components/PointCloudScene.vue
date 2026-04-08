@@ -29,6 +29,9 @@ let gridHelper
 let axesHelper
 let hasFramedPointCloud = false
 
+const PIPE_LENGTH_METERS = 6
+const PIPE_RADIUS_METERS = 0.5
+
 function getContainerSize() {
   const width = container.value?.clientWidth || 0
   const height = container.value?.clientHeight || 0
@@ -36,7 +39,7 @@ function getContainerSize() {
 }
 
 function getColorComponents(zValue) {
-  const ratio = Math.min(1, Math.abs(zValue) / 8)
+  const ratio = Math.min(1, Math.abs(zValue) / (PIPE_LENGTH_METERS / 2))
   return [
     0.12 + ratio * 0.45,
     0.62 + ratio * 0.24,
@@ -127,16 +130,16 @@ function createScene() {
   keyLight.position.set(12, 16, 10)
   scene.add(keyLight)
 
-  gridHelper = new THREE.GridHelper(40, 20, 0x2e9fd8, 0x18496f)
-  gridHelper.position.y = -10
+  gridHelper = new THREE.GridHelper(5, 20, 0x2e9fd8, 0x18496f)
+  gridHelper.position.y = -0.5
   scene.add(gridHelper)
 
-  axesHelper = new THREE.AxesHelper(10)
+  axesHelper = new THREE.AxesHelper(1.0)
   scene.add(axesHelper)
 
   pointGeometry = new THREE.BufferGeometry()
   pointMaterial = new THREE.PointsMaterial({
-    size: 0.34,
+    size: 0.02,
     sizeAttenuation: true,
     vertexColors: true
   })
@@ -156,11 +159,11 @@ function framePointCloud() {
   pointGeometry.boundingBox.getCenter(center)
   pointGeometry.boundingBox.getSize(size)
 
-  const radius = Math.max(size.length() * 0.6, 8)
+  const radius = Math.max(size.length() * 0.72, PIPE_LENGTH_METERS * 0.75, PIPE_RADIUS_METERS * 6)
   controls.target.copy(center)
-  camera.position.set(center.x + radius, center.y + radius * 0.75, center.z + radius)
+  camera.position.set(center.x + radius * 0.52, center.y + radius * 0.56, center.z + radius * 1.1)
   camera.near = 0.1
-  camera.far = Math.max(radius * 20, 200)
+  camera.far = Math.max(radius * 18, 120)
   camera.updateProjectionMatrix()
   controls.update()
 }

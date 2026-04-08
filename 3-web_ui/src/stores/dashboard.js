@@ -112,12 +112,19 @@ const mockDetail = {
 
 function buildMockPoints() {
   const points = []
-  for (let i = 0; i < 1800; i += 1) {
+  const pointCount = 9200
+  const pipeRadius = 1.0
+  const pipeLength = 5
+
+  for (let i = 0; i < pointCount; i += 1) {
     const angle = Math.random() * Math.PI * 2
-    const radius = 28 + (Math.random() - 0.5) * 2.8
+    const radiusJitter = (Math.random() - 0.5) * 0.045
+    const axialJitter = (Math.random() - 0.5) * 0.05
+    const surfaceWave = Math.sin((i / pointCount) * Math.PI * 14) * 0.02
+    const radius = pipeRadius + radiusJitter + surfaceWave
     const x = Math.cos(angle) * radius
     const y = Math.sin(angle) * radius
-    const z = (Math.random() - 0.5) * 8
+    const z = (Math.random() - 0.5) * pipeLength + axialJitter
     points.push({ x, y, z })
   }
   return points
