@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { PCDLoader } from 'three/examples/jsm/loaders/PCDLoader.js'
 import { exportInspectionRecord, fetchInspectionDetail, fetchInspectionHistory } from '../api/history'
-import { fetchPipeDatasetPointCloud } from '../api/pointCloud'
+import { fetchPipeDatasetFittedResult, fetchPipeDatasetPointCloud } from '../api/pointCloud'
 import { appConfig } from '../config/app'
 
 const MODE_MAP = {
@@ -317,7 +317,12 @@ export const useDashboardStore = defineStore('dashboard', {
     triggerCount: 0,
     cooldownUntil: 0,
     testAssemblyPoints: [],
-    pcdLoadSequenceToken: 0
+    pcdLoadSequenceToken: 0,
+    fitViewEnabled: false,
+    fitViewAvailable: false,
+    fittedPipeData: null,
+    fittedPipeLoading: false,
+    fittedPipeLoadError: ''
   }),
   actions: {
     setRosConnected(status) {
@@ -426,6 +431,7 @@ export const useDashboardStore = defineStore('dashboard', {
       const nextValue = Boolean(enabled)
       this.pcdLoadSequenceToken += 1
       this.cooldownUntil = 0
+      this.resetFitViewState(true)
 
       if (nextValue) {
         this.resetAutoAssembly(false)
@@ -469,6 +475,12 @@ export const useDashboardStore = defineStore('dashboard', {
       this.testState = TEST_MODE_STATES.PROCESSING_CAPTURE
       return true
     },
+    resetTestAssemblyForNextRun() {
+      this.testAssemblyPoints = []
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+      this.pointCloudPoints = []
+      this.resetFitViewState(true)
+    },
     async loadAndAppendTestCapture(stopNumber) {
       const stopId = formatStopId(stopNumber)
       const arrayBuffer = await fetchPipeDatasetPointCloud(stopId)
@@ -505,10 +517,51 @@ export const useDashboardStore = defineStore('dashboard', {
 
       this.triggerCount = 0
       this.cooldownUntil = 0
-      this.testAssemblyPoints = []
       this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
-      this.pointCloudPoints = []
+      this.pointCloudPoints = this.testAssemblyPoints.slice()
       this.testState = TEST_MODE_STATES.WAITING_TRIGGER
+      this.fitViewAvailable = true
+      this.fitViewEnabled = false
+    },
+    resetFitViewState(clearData = false) {
+      this.fitViewEnabled = false
+      this.fitViewAvailable = false
+      this.fittedPipeLoading = false
+      this.fittedPipeLoadError = ''
+      if (clearData) {
+        this.fittedPipeData = null
+      }
+    },
+    async setFitViewEnabled(enabled) {
+      const nextValue = Boolean(enabled)
+
+      if (!nextValue) {
+        this.fitViewEnabled = false
+        this.fittedPipeLoading = false
+        this.fittedPipeLoadError = ''
+        return true
+      }
+
+      if (!this.fitViewAvailable) {
+        return false
+      }
+
+      this.fitViewEnabled = true
+      this.fittedPipeLoadError = ''
+      if (this.fittedPipeData || this.fittedPipeLoading) {
+        return true
+      }
+
+      this.fittedPipeLoading = true
+      try {
+        this.fittedPipeData = await fetchPipeDatasetFittedResult()
+        return true
+      } catch (error) {
+        this.fittedPipeLoadError = error?.response?.data?.message || error?.message || '拟合结果加载失败'
+        return false
+      } finally {
+        this.fittedPipeLoading = false
+      }
     },
     setPatrolModeByState(isManual) {
       const nextMode = normalizeMode(isManual)

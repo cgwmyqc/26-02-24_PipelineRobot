@@ -6,12 +6,23 @@ import { appConfig } from '../config/app'
 
 const POINT_CLOUD_TIMEOUT_MS = 2500
 const MAX_POINT_CLOUD_POINTS = 5000
+const TEST_START_DELAY_MS = 0
+const TEST_CAPTURE_LOAD_DELAY_MS = 0
+const TEST_FINISH_COOLDOWN_MS = 0
 const IS_DEV = import.meta.env.DEV
 
 function debugLog(...args) {
   if (IS_DEV) {
     console.debug('[ros-dashboard]', ...args)
   }
+}
+
+function getAxiosStatus(error) {
+  return Number(error?.response?.status || 0)
+}
+
+function getAxiosMessage(error) {
+  return error?.response?.data?.message || error?.message || 'unknown error'
 }
 
 function decodeBase64ToBytes(base64Value) {
@@ -185,14 +196,30 @@ export function useRosDashboard() {
         return
       }
       store.setTestWaitingTrigger()
-    }, 5000)
+    }, TEST_START_DELAY_MS)
   }
 
   async function completeTestCapture(stopNumber, token) {
     try {
       await store.loadAndAppendTestCapture(stopNumber)
     } catch (error) {
-      debugLog('test capture load failed', error)
+      const status = getAxiosStatus(error)
+      if (status === 404) {
+        debugLog(`test capture PCD missing for stop_${String(stopNumber).padStart(4, '0')}`, {
+          status,
+          message: getAxiosMessage(error)
+        })
+      } else if (error instanceof Error && /contains no valid points/i.test(error.message)) {
+        debugLog(`test capture PCD parse failed for stop_${String(stopNumber).padStart(4, '0')}`, {
+          message: error.message
+        })
+      } else {
+        debugLog('test capture load failed', {
+          status,
+          message: getAxiosMessage(error),
+          error
+        })
+      }
       if (store.testModeEnabled && token === store.pcdLoadSequenceToken) {
         store.setTestWaitingTrigger()
       }
@@ -202,6 +229,10 @@ export function useRosDashboard() {
   function triggerTestCapture() {
     if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.WAITING_TRIGGER || store.triggerCount >= 14) {
       return
+    }
+
+    if (store.triggerCount === 0) {
+      store.resetTestAssemblyForNextRun()
     }
 
     const stopNumber = store.triggerCount + 1
@@ -216,7 +247,7 @@ export function useRosDashboard() {
         return
       }
       completeTestCapture(stopNumber, token)
-    }, 3000)
+    }, TEST_CAPTURE_LOAD_DELAY_MS)
   }
 
   function finishTestSequence() {
@@ -225,7 +256,7 @@ export function useRosDashboard() {
     }
 
     const token = store.advancePcdLoadSequenceToken()
-    const cooldownUntil = Date.now() + 120000
+    const cooldownUntil = Date.now() + TEST_FINISH_COOLDOWN_MS
     store.beginTestCooldown(cooldownUntil)
     publishUiScriptCommand('end_pipe_postprocess.sh')
 
@@ -234,7 +265,7 @@ export function useRosDashboard() {
         return
       }
       store.finishTestCooldown()
-    }, 120000)
+    }, TEST_FINISH_COOLDOWN_MS)
   }
 
   function refreshStreamStates() {

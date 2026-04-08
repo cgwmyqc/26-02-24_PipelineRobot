@@ -5,3 +5,8 @@ export function fetchPipeDatasetPointCloud(stopId) {
     responseType: 'arraybuffer'
   }).then((response) => response.data)
 }
+
+export function fetchPipeDatasetFittedResult() {
+  return request.get('/files/pipe-dataset/defects_global.json')
+    .then((response) => response.data)
+}

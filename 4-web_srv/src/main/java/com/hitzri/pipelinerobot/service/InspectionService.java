@@ -2,6 +2,8 @@ package com.hitzri.pipelinerobot.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hitzri.pipelinerobot.config.StorageProperties;
 import com.hitzri.pipelinerobot.entity.InspectionAnomalyImage;
 import com.hitzri.pipelinerobot.entity.InspectionRecord;
@@ -26,6 +28,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -37,19 +41,23 @@ import org.springframework.util.StringUtils;
 @Service
 public class InspectionService {
     private static final Pattern PIPE_STOP_ID_PATTERN = Pattern.compile("^stop_(000[1-9]|001[0-4])$");
+    private static final Logger log = LoggerFactory.getLogger(InspectionService.class);
 
     private final InspectionRecordMapper inspectionRecordMapper;
     private final InspectionAnomalyImageMapper anomalyImageMapper;
     private final StorageProperties storageProperties;
+    private final ObjectMapper objectMapper;
 
     public InspectionService(
         InspectionRecordMapper inspectionRecordMapper,
         InspectionAnomalyImageMapper anomalyImageMapper,
-        StorageProperties storageProperties
+        StorageProperties storageProperties,
+        ObjectMapper objectMapper
     ) {
         this.inspectionRecordMapper = inspectionRecordMapper;
         this.anomalyImageMapper = anomalyImageMapper;
         this.storageProperties = storageProperties;
+        this.objectMapper = objectMapper;
     }
 
     public PageResponse<InspectionHistoryItemVO> getHistory(
@@ -134,12 +142,35 @@ public class InspectionService {
             throw new IllegalArgumentException("无效的点云目录");
         }
 
-        Path datasetRoot = Paths.get(storageProperties.getPipeDatasetRoot()).toAbsolutePath().normalize();
+        Path datasetRoot = resolvePipeDatasetRootPath();
         Path filePath = datasetRoot.resolve(stopId).resolve("cloud_accum.pcd").normalize();
         if (!filePath.startsWith(datasetRoot)) {
             throw new IllegalArgumentException("无效的点云路径");
         }
         return filePath;
+    }
+
+    public Path resolvePipeDatasetRootPath() {
+        Path datasetRoot = Paths.get(storageProperties.getPipeDatasetRoot()).toAbsolutePath().normalize();
+        log.debug("Resolved pipe dataset root: {}", datasetRoot);
+        return datasetRoot;
+    }
+
+    public Path resolvePipeDatasetFittedResultPath() {
+        Path datasetRoot = resolvePipeDatasetRootPath();
+        Path filePath = datasetRoot.resolve("defects_global.json").normalize();
+        if (!filePath.startsWith(datasetRoot)) {
+            throw new IllegalArgumentException("无效的拟合结果路径");
+        }
+        return filePath;
+    }
+
+    public JsonNode readPipeDatasetFittedResult() throws IOException {
+        Path filePath = resolvePipeDatasetFittedResultPath();
+        if (!Files.exists(filePath)) {
+            throw new java.nio.file.NoSuchFileException("拟合结果文件不存在: " + filePath);
+        }
+        return objectMapper.readTree(Files.newBufferedReader(filePath, StandardCharsets.UTF_8));
     }
 
     private void writeFileToZip(ZipOutputStream zipOutputStream, String relativePath, String prefix) throws IOException {

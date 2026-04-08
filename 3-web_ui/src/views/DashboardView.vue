@@ -58,7 +58,30 @@
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
           <div class="panel-body point-panel-body">
-            <PointCloudScene v-memo="[pointCloudPoints]" :points="pointCloudPoints" />
+            <label :class="['fit-switch hud-panel', { disabled: isFitSwitchDisabled }]">
+              <span class="fit-switch-label">点云拟合</span>
+              <input
+                class="fit-switch-input"
+                type="checkbox"
+                :checked="fitViewEnabled"
+                :disabled="isFitSwitchDisabled"
+                @change="handleFitViewToggle"
+              >
+              <span :class="['fit-switch-track', { active: fitViewEnabled && !isFitSwitchDisabled }]">
+                <span class="fit-switch-thumb" />
+              </span>
+            </label>
+            <PointCloudScene
+              :mode="pointCloudSceneMode"
+              :points="pointCloudPoints"
+              :fitted-data="fittedPipeData"
+            />
+            <div v-if="fitViewEnabled && fittedPipeLoading" class="point-cloud-overlay">
+              正在加载拟合结果...
+            </div>
+            <div v-else-if="fitViewEnabled && fittedPipeLoadError" class="point-cloud-overlay error">
+              {{ fittedPipeLoadError }}
+            </div>
           </div>
         </section>
       </section>
@@ -113,7 +136,12 @@ const {
   testModeEnabled,
   testState,
   triggerCount,
-  cooldownUntil
+  cooldownUntil,
+  fitViewEnabled,
+  fitViewAvailable,
+  fittedPipeData,
+  fittedPipeLoading,
+  fittedPipeLoadError
 } = storeToRefs(store)
 
 const {
@@ -129,11 +157,17 @@ const {
 } = useRosDashboard()
 
 const uiPatrolMode = computed(() => rosPatrolMode.value || storePatrolMode.value)
+const pointCloudSceneMode = computed(() => (fitViewEnabled.value ? 'fitted' : 'raw'))
+const isFitSwitchDisabled = computed(() => !fitViewAvailable.value || fittedPipeLoading.value)
 const { loadHistory, changeHistoryPage, openDetail, closeDetail, exportRecord } = store
 
 function handleLogout() {
   authStore.logout()
   router.push('/login')
+}
+
+function handleFitViewToggle(event) {
+  store.setFitViewEnabled(Boolean(event?.target?.checked))
 }
 </script>
 
@@ -222,6 +256,90 @@ function handleLogout() {
   min-height: 320px;
   padding: 0;
   overflow: hidden;
+}
+
+.fit-switch {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.fit-switch-label {
+  color: var(--text-primary);
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.fit-switch-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fit-switch-track {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(140, 159, 178, 0.35);
+  transition: background 0.2s ease;
+}
+
+.fit-switch-track.active {
+  background: linear-gradient(135deg, #88f1ba, #60f2df);
+}
+
+.fit-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f7fffb;
+  box-shadow: 0 4px 12px rgba(3, 8, 15, 0.28);
+  transition: transform 0.2s ease;
+}
+
+.fit-switch-track.active .fit-switch-thumb {
+  transform: translateX(22px);
+}
+
+.fit-switch.disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.point-cloud-overlay {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(6, 16, 27, 0.76);
+  border: 1px solid rgba(105, 140, 168, 0.35);
+  color: rgba(227, 240, 252, 0.9);
+  font-size: 13px;
+  line-height: 1.4;
+  backdrop-filter: blur(8px);
+}
+
+.point-cloud-overlay.error {
+  color: rgba(255, 214, 214, 0.96);
+  border-color: rgba(212, 89, 89, 0.45);
+  background: rgba(42, 11, 11, 0.72);
 }
 
 .dashboard-primary > *,
