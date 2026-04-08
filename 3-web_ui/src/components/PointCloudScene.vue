@@ -131,7 +131,7 @@ function createScene() {
   scene.add(keyLight)
 
   gridHelper = new THREE.GridHelper(5, 20, 0x2e9fd8, 0x18496f)
-  gridHelper.position.y = -0.5
+  gridHelper.position.y = -1.0
   scene.add(gridHelper)
 
   axesHelper = new THREE.AxesHelper(1.0)

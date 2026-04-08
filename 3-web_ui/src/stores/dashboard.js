@@ -112,9 +112,9 @@ const mockDetail = {
 
 function buildMockPoints() {
   const points = []
-  const pointCount = 9200
+  const pointCount = 15000
   const pipeRadius = 1.0
-  const pipeLength = 5
+  const pipeLength = 4
 
   for (let i = 0; i < pointCount; i += 1) {
     const angle = Math.random() * Math.PI * 2
