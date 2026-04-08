@@ -23,6 +23,14 @@
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
               :publish-ui-script-command="publishUiScriptCommand"
+              :test-mode-enabled="testModeEnabled"
+              :test-state="testState"
+              :trigger-count="triggerCount"
+              :cooldown-until="cooldownUntil"
+              :set-test-mode-enabled="setTestModeEnabled"
+              :start-test-sequence="startTestSequence"
+              :trigger-test-capture="triggerTestCapture"
+              :finish-test-sequence="finishTestSequence"
             />
           </div>
         </div>
@@ -50,7 +58,7 @@
         <section class="panel point-panel">
           <div class="panel-title">点云数据</div>
           <div class="panel-body point-panel-body">
-            <PointCloudScene :points="pointCloudPoints" />
+            <PointCloudScene v-memo="[pointCloudPoints]" :points="pointCloudPoints" />
           </div>
         </section>
       </section>
@@ -101,7 +109,11 @@ const {
   detailLoading,
   detailRecord,
   exportingId,
-  pointCloudPoints
+  pointCloudPoints,
+  testModeEnabled,
+  testState,
+  triggerCount,
+  cooldownUntil
 } = storeToRefs(store)
 
 const {
@@ -109,7 +121,11 @@ const {
   setPatrolMode,
   publishMoveCommand,
   startAutoInspection,
-  publishUiScriptCommand
+  publishUiScriptCommand,
+  setTestModeEnabled,
+  startTestSequence,
+  triggerTestCapture,
+  finishTestSequence
 } = useRosDashboard()
 
 const uiPatrolMode = computed(() => rosPatrolMode.value || storePatrolMode.value)

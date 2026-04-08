@@ -248,8 +248,7 @@ watch(
     if (scene) {
       updatePoints()
     }
-  },
-  { deep: true }
+  }
 )
 
 onMounted(() => {

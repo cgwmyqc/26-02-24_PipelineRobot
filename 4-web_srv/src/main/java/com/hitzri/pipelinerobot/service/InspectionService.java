@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.springframework.core.io.ByteArrayResource;
@@ -35,6 +36,7 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class InspectionService {
+    private static final Pattern PIPE_STOP_ID_PATTERN = Pattern.compile("^stop_(000[1-9]|001[0-4])$");
 
     private final InspectionRecordMapper inspectionRecordMapper;
     private final InspectionAnomalyImageMapper anomalyImageMapper;
@@ -125,6 +127,19 @@ public class InspectionService {
 
     public Path resolveStoragePath(String relativePath) {
         return Paths.get(storageProperties.getRootDir()).resolve(relativePath).normalize();
+    }
+
+    public Path resolvePipeDatasetPointCloudPath(String stopId) {
+        if (!PIPE_STOP_ID_PATTERN.matcher(String.valueOf(stopId)).matches()) {
+            throw new IllegalArgumentException("无效的点云目录");
+        }
+
+        Path datasetRoot = Paths.get(storageProperties.getPipeDatasetRoot()).toAbsolutePath().normalize();
+        Path filePath = datasetRoot.resolve(stopId).resolve("cloud_accum.pcd").normalize();
+        if (!filePath.startsWith(datasetRoot)) {
+            throw new IllegalArgumentException("无效的点云路径");
+        }
+        return filePath;
     }
 
     private void writeFileToZip(ZipOutputStream zipOutputStream, String relativePath, String prefix) throws IOException {

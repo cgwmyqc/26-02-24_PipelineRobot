@@ -32,4 +32,16 @@ public class FileController {
         MediaType mediaType = category.equals("videos") ? MediaType.APPLICATION_OCTET_STREAM : MediaType.IMAGE_JPEG;
         return ResponseEntity.ok().contentType(mediaType).body(new FileSystemResource(path));
     }
+
+    @GetMapping("/pipe-dataset/{stopId}/cloud_accum.pcd")
+    public ResponseEntity<Resource> getPipeDatasetPointCloud(@PathVariable String stopId) throws IOException {
+        Path path = inspectionService.resolvePipeDatasetPointCloudPath(stopId);
+        if (!Files.exists(path)) {
+            throw new IllegalArgumentException("点云文件不存在");
+        }
+
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .body(new FileSystemResource(path));
+    }
 }

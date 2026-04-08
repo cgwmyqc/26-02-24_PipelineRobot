@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useDashboardStore } from '../stores/dashboard'
+import { TEST_MODE_STATES, useDashboardStore } from '../stores/dashboard'
 import { rosService } from '../services/ros'
 import { appConfig } from '../config/app'
 
@@ -104,6 +104,19 @@ export function useRosDashboard() {
   const uiPatrolMode = computed(() => pendingPatrolMode.value || patrolMode.value)
   let streamWatchdogId = 0
   let hasLoggedPointCloudFrame = false
+  let lastMotionReachedValue = false
+  let testStartTimerId = 0
+  let testProcessTimerId = 0
+  let testCooldownTimerId = 0
+
+  function clearTestTimers() {
+    window.clearTimeout(testStartTimerId)
+    window.clearTimeout(testProcessTimerId)
+    window.clearTimeout(testCooldownTimerId)
+    testStartTimerId = 0
+    testProcessTimerId = 0
+    testCooldownTimerId = 0
+  }
 
   function publishManualMode(isManual) {
     rosService.publish(appConfig.topics.manualModeCommand, {
@@ -125,6 +138,10 @@ export function useRosDashboard() {
   }
 
   function startAutoInspection() {
+    if (!store.startAutoAssembly()) {
+      return
+    }
+    lastMotionReachedValue = false
     rosService.publish(appConfig.topics.startAuto, { data: true })
   }
 
@@ -139,6 +156,85 @@ export function useRosDashboard() {
     }
 
     rosService.publish(appConfig.topics.uiCallScriptCmd, { data: normalized })
+  }
+
+  function setTestModeEnabled(enabled) {
+    clearTestTimers()
+    if (!enabled) {
+      store.setTestModeEnabled(false)
+      publishUiScriptCommand('stop_pipe_system.sh')
+      return
+    }
+
+    store.setTestModeEnabled(true)
+  }
+
+  function startTestSequence() {
+    if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.WAITING_START) {
+      return
+    }
+
+    const token = store.advancePcdLoadSequenceToken()
+    if (!store.beginTestSystemStart()) {
+      return
+    }
+
+    publishUiScriptCommand('start_pipe_system.sh')
+    testStartTimerId = window.setTimeout(() => {
+      if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
+        return
+      }
+      store.setTestWaitingTrigger()
+    }, 5000)
+  }
+
+  async function completeTestCapture(stopNumber, token) {
+    try {
+      await store.loadAndAppendTestCapture(stopNumber)
+    } catch (error) {
+      debugLog('test capture load failed', error)
+      if (store.testModeEnabled && token === store.pcdLoadSequenceToken) {
+        store.setTestWaitingTrigger()
+      }
+    }
+  }
+
+  function triggerTestCapture() {
+    if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.WAITING_TRIGGER || store.triggerCount >= 14) {
+      return
+    }
+
+    const stopNumber = store.triggerCount + 1
+    const token = store.advancePcdLoadSequenceToken()
+    if (!store.beginTestCaptureProcessing()) {
+      return
+    }
+
+    publishUiScriptCommand('trigger_stop_capture.sh')
+    testProcessTimerId = window.setTimeout(() => {
+      if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
+        return
+      }
+      completeTestCapture(stopNumber, token)
+    }, 3000)
+  }
+
+  function finishTestSequence() {
+    if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.READY_FINISH) {
+      return
+    }
+
+    const token = store.advancePcdLoadSequenceToken()
+    const cooldownUntil = Date.now() + 120000
+    store.beginTestCooldown(cooldownUntil)
+    publishUiScriptCommand('end_pipe_postprocess.sh')
+
+    testCooldownTimerId = window.setTimeout(() => {
+      if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
+        return
+      }
+      store.finishTestCooldown()
+    }, 120000)
   }
 
   function refreshStreamStates() {
@@ -226,6 +322,16 @@ export function useRosDashboard() {
     )
 
     unsubscribers.push(
+      rosService.subscribe(appConfig.topics.motionReached, (message) => {
+        const value = Boolean(message.data)
+        if (value && !lastMotionReachedValue) {
+          store.appendNextAutoAssemblySegment()
+        }
+        lastMotionReachedValue = value
+      })
+    )
+
+    unsubscribers.push(
       rosService.subscribe(appConfig.topics.pointCloud, (message) => {
         try {
           const points = decodePointCloud(message)
@@ -255,6 +361,7 @@ export function useRosDashboard() {
 
   onBeforeUnmount(() => {
     window.clearInterval(streamWatchdogId)
+    clearTestTimers()
     unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe())
   })
 
@@ -264,6 +371,10 @@ export function useRosDashboard() {
     publishMoveCommand,
     startAutoInspection,
     markDetectDone,
-    publishUiScriptCommand
+    publishUiScriptCommand,
+    setTestModeEnabled,
+    startTestSequence,
+    triggerTestCapture,
+    finishTestSequence
   }
 }

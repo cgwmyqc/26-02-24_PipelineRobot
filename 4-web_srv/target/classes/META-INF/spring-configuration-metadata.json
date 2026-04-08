@@ -43,6 +43,11 @@
       "sourceType": "com.hitzri.pipelinerobot.config.StorageProperties"
     },
     {
+      "name": "app.storage.pipe-dataset-root",
+      "type": "java.lang.String",
+      "sourceType": "com.hitzri.pipelinerobot.config.StorageProperties"
+    },
+    {
       "name": "app.storage.public-url-prefix",
       "type": "java.lang.String",
       "sourceType": "com.hitzri.pipelinerobot.config.StorageProperties"

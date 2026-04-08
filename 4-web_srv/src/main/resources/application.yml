@@ -33,7 +33,7 @@ app:
     root-dir: ${STORAGE_ROOT:storage}
     video-dir: ${VIDEO_DIR:videos}
     image-dir: ${IMAGE_DIR:images}
+    pipe-dataset-root: ${PIPE_DATASET_ROOT:/home/cheng/pipe_dataset}
     public-url-prefix: /api/files
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.132:5173}
-

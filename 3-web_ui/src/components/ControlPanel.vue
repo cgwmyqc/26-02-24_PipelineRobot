@@ -24,7 +24,7 @@
 
           <label class="test-switch hud-panel">
             <span class="test-switch-label">测试模式</span>
-            <input v-model="testModeEnabled" type="checkbox" class="test-switch-input">
+            <input v-model="testModeModel" type="checkbox" class="test-switch-input">
             <span :class="['test-switch-track', { active: testModeEnabled }]">
               <span class="test-switch-thumb" />
             </span>
@@ -78,13 +78,33 @@
             </div>
 
             <div v-if="testModeEnabled" class="test-actions hud-panel hud-block">
-              <button class="test-action-btn" @click="triggerTestScript('test.sh')">
+              <div class="test-meta">
+                <span>状态：{{ testStateLabel }}</span>
+                <span>已触发：{{ triggerCount }}/14</span>
+              </div>
+
+              <button
+                class="test-action-btn"
+                :class="{ disabled: isStartTestDisabled }"
+                :disabled="isStartTestDisabled"
+                @click="startTestSequence"
+              >
                 开始测试
               </button>
-              <button class="test-action-btn" @click="triggerTestScript('triger_stop_capture.sh')">
+              <button
+                class="test-action-btn"
+                :class="{ disabled: isTriggerDisabled }"
+                :disabled="isTriggerDisabled"
+                @click="triggerTestCapture"
+              >
                 触发
               </button>
-              <button class="test-action-btn" @click="triggerTestScript('end_pipe_postprocess.sh')">
+              <button
+                class="test-action-btn"
+                :class="{ disabled: isFinishDisabled }"
+                :disabled="isFinishDisabled"
+                @click="finishTestSequence"
+              >
                 测试完成
               </button>
             </div>
@@ -143,11 +163,12 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import MetricCard from './MetricCard.vue'
 import PipeThreeScene from './PipeThreeScene.vue'
 import { resolveImageAsset } from '../utils/assets'
 import { formatValue } from '../utils/format'
+import { TEST_MODE_STATES } from '../stores/dashboard'
 
 const props = defineProps({
   patrolMode: String,
@@ -160,7 +181,15 @@ const props = defineProps({
   setPatrolMode: Function,
   publishMoveCommand: Function,
   startAutoInspection: Function,
-  publishUiScriptCommand: Function
+  publishUiScriptCommand: Function,
+  testModeEnabled: Boolean,
+  testState: String,
+  triggerCount: Number,
+  cooldownUntil: Number,
+  setTestModeEnabled: Function,
+  startTestSequence: Function,
+  triggerTestCapture: Function,
+  finishTestSequence: Function
 })
 
 const forwardActiveImage = resolveImageAsset('btn_fw_active')
@@ -175,7 +204,6 @@ const mudheightImage = resolveImageAsset('mudheight')
 
 const isManualMode = computed(() => props.patrolMode === 'manual')
 const isAutoMode = computed(() => props.patrolMode === 'auto')
-const testModeEnabled = ref(false)
 
 const directionLabel = computed(() => {
   if (props.motorRunState === 1) {
@@ -193,15 +221,33 @@ const forwardButtonImage = computed(() => (isManualMode.value ? forwardActiveIma
 const reverseButtonImage = computed(() => (isManualMode.value ? reverseActiveImage : reverseInactiveImage))
 const startButtonImage = computed(() => (isAutoMode.value ? startActiveImage : startInactiveImage))
 
+const testModeModel = computed({
+  get: () => Boolean(props.testModeEnabled),
+  set: (value) => props.setTestModeEnabled?.(value)
+})
+
+const testStateLabel = computed(() => {
+  const mapping = {
+    [TEST_MODE_STATES.WAITING_START]: '等待开始',
+    [TEST_MODE_STATES.STARTING_SYSTEM]: '系统启动中',
+    [TEST_MODE_STATES.WAITING_TRIGGER]: '等待触发',
+    [TEST_MODE_STATES.PROCESSING_CAPTURE]: '数据处理中',
+    [TEST_MODE_STATES.READY_FINISH]: '等待完成',
+    [TEST_MODE_STATES.COOLDOWN]: '冷却中',
+    [TEST_MODE_STATES.IDLE]: '未开启'
+  }
+  return mapping[props.testState] || '未开启'
+})
+
+const isStartTestDisabled = computed(() => props.testState !== TEST_MODE_STATES.WAITING_START)
+const isTriggerDisabled = computed(() => props.testState !== TEST_MODE_STATES.WAITING_TRIGGER)
+const isFinishDisabled = computed(() => props.testState !== TEST_MODE_STATES.READY_FINISH)
+
 function toggleMove(direction, active) {
   if (!isManualMode.value) {
     return
   }
   props.publishMoveCommand?.(direction, active)
-}
-
-function triggerTestScript(scriptName) {
-  props.publishUiScriptCommand?.(scriptName)
 }
 </script>
 
@@ -366,11 +412,19 @@ function triggerTestScript(scriptName) {
 .test-actions {
   display: grid;
   align-content: center;
-  gap: 16px;
+  gap: 12px;
   min-height: 240px;
-  min-width: 132px;
+  min-width: 144px;
   padding: 16px 12px;
   border-radius: 18px;
+}
+
+.test-meta {
+  display: grid;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .image-action-btn {
@@ -409,8 +463,8 @@ function triggerTestScript(scriptName) {
 }
 
 .test-action-btn {
-  min-width: 108px;
-  min-height: 46px;
+  min-width: 112px;
+  min-height: 44px;
   padding: 10px 14px;
   border: 1px solid rgba(103, 212, 255, 0.24);
   border-radius: 14px;
@@ -426,6 +480,13 @@ function triggerTestScript(scriptName) {
   transform: translateY(-1px);
   border-color: rgba(103, 212, 255, 0.42);
   background: rgba(17, 36, 54, 0.96);
+}
+
+.test-action-btn.disabled,
+.test-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  transform: none;
 }
 
 .metrics {
@@ -527,6 +588,10 @@ function triggerTestScript(scriptName) {
     min-height: auto;
     min-width: 0;
     width: 100%;
+  }
+
+  .test-meta {
+    grid-column: 1 / -1;
   }
 
   .test-action-btn {

@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
+import { PCDLoader } from 'three/examples/jsm/loaders/PCDLoader.js'
 import { exportInspectionRecord, fetchInspectionDetail, fetchInspectionHistory } from '../api/history'
+import { fetchPipeDatasetPointCloud } from '../api/pointCloud'
 import { appConfig } from '../config/app'
 
 const MODE_MAP = {
@@ -17,6 +19,39 @@ const RESULT_MAP = {
   1: '裂缝预警',
   2: '淤泥预警'
 }
+
+export const POINT_CLOUD_DISPLAY_MODES = Object.freeze({
+  MOCK: 'mock',
+  AUTO_ASSEMBLY: 'auto_assembly',
+  TEST_ASSEMBLY: 'test_assembly',
+  LIVE_STREAM: 'live_stream'
+})
+
+export const TEST_MODE_STATES = Object.freeze({
+  IDLE: 'idle',
+  WAITING_START: 'waiting_start',
+  STARTING_SYSTEM: 'starting_system',
+  WAITING_TRIGGER: 'waiting_trigger',
+  PROCESSING_CAPTURE: 'processing_capture',
+  READY_FINISH: 'ready_finish',
+  COOLDOWN: 'cooldown'
+})
+
+const AUTO_SEGMENT_CENTERS = Object.freeze([-0.6, -0.3, 0.0, 0.3, 0.6])
+const TEST_CAPTURE_MAX_COUNT = 14
+const TEST_CAPTURE_FIRST_Z = -2.0
+const TEST_CAPTURE_Z_STEP = 0.3
+const DEFAULT_PIPE_POINT_COUNT = 15000
+const DEFAULT_PIPE_RADIUS = 1.0
+const DEFAULT_PIPE_LENGTH = 4.0
+const DEFAULT_RADIAL_JITTER = 0.045
+const DEFAULT_AXIAL_JITTER = 0.05
+const AUTO_SEGMENT_POINT_COUNT = 1200
+const AUTO_SEGMENT_LENGTH = 0.32
+const AUTO_SEGMENT_AXIAL_JITTER = 0.02
+const MAX_IMPORTED_PCD_POINTS = 5000
+
+const pcdLoader = new PCDLoader()
 
 function formatDateOnly(value) {
   if (!value) {
@@ -110,24 +145,45 @@ const mockDetail = {
   ]
 }
 
-function buildMockPoints() {
+function buildPipeShellPoints({
+  pointCount,
+  radius,
+  length,
+  zCenter = 0,
+  radialJitter = DEFAULT_RADIAL_JITTER,
+  axialJitter = DEFAULT_AXIAL_JITTER
+}) {
   const points = []
-  const pointCount = 15000
-  const pipeRadius = 1.0
-  const pipeLength = 4
-
-  for (let i = 0; i < pointCount; i += 1) {
+  for (let index = 0; index < pointCount; index += 1) {
     const angle = Math.random() * Math.PI * 2
-    const radiusJitter = (Math.random() - 0.5) * 0.045
-    const axialJitter = (Math.random() - 0.5) * 0.05
-    const surfaceWave = Math.sin((i / pointCount) * Math.PI * 14) * 0.02
-    const radius = pipeRadius + radiusJitter + surfaceWave
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius
-    const z = (Math.random() - 0.5) * pipeLength + axialJitter
+    const radiusOffset = (Math.random() - 0.5) * radialJitter
+    const lengthOffset = (Math.random() - 0.5) * axialJitter
+    const surfaceWave = Math.sin((index / pointCount) * Math.PI * 14) * 0.02
+    const currentRadius = radius + radiusOffset + surfaceWave
+    const x = Math.cos(angle) * currentRadius
+    const y = Math.sin(angle) * currentRadius
+    const z = zCenter + (Math.random() - 0.5) * length + lengthOffset
     points.push({ x, y, z })
   }
   return points
+}
+
+function buildMockPoints() {
+  return buildPipeShellPoints({
+    pointCount: DEFAULT_PIPE_POINT_COUNT,
+    radius: DEFAULT_PIPE_RADIUS,
+    length: DEFAULT_PIPE_LENGTH
+  })
+}
+
+function buildAutoSegmentPoints(zCenter) {
+  return buildPipeShellPoints({
+    pointCount: AUTO_SEGMENT_POINT_COUNT,
+    radius: DEFAULT_PIPE_RADIUS,
+    length: AUTO_SEGMENT_LENGTH,
+    zCenter,
+    axialJitter: AUTO_SEGMENT_AXIAL_JITTER
+  })
 }
 
 function normalizeMode(isManual) {
@@ -144,6 +200,76 @@ function normalizeAssetUrl(url) {
     return url
   }
 }
+
+function formatStopId(stopNumber) {
+  return `stop_${String(stopNumber).padStart(4, '0')}`
+}
+
+function getTestSegmentTargetZ(stopNumber) {
+  return TEST_CAPTURE_FIRST_Z + (stopNumber - 1) * TEST_CAPTURE_Z_STEP
+}
+
+function centerPointsAtOrigin(points) {
+  if (!Array.isArray(points) || !points.length) {
+    return []
+  }
+
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+
+  points.forEach((point) => {
+    minX = Math.min(minX, point.x)
+    maxX = Math.max(maxX, point.x)
+    minY = Math.min(minY, point.y)
+    maxY = Math.max(maxY, point.y)
+    minZ = Math.min(minZ, point.z)
+    maxZ = Math.max(maxZ, point.z)
+  })
+
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+  const centerZ = (minZ + maxZ) / 2
+
+  return points.map((point) => ({
+    x: point.x - centerX,
+    y: point.y - centerY,
+    z: point.z - centerZ
+  }))
+}
+
+function parsePcdArrayBuffer(arrayBuffer) {
+  const parsed = pcdLoader.parse(arrayBuffer, '')
+  const positionAttribute = parsed?.geometry?.getAttribute('position')
+  if (!positionAttribute?.array?.length) {
+    return []
+  }
+
+  const step = Math.max(1, Math.ceil(positionAttribute.count / MAX_IMPORTED_PCD_POINTS))
+  const points = []
+
+  for (let index = 0; index < positionAttribute.count; index += step) {
+    const offset = index * 3
+    const x = positionAttribute.array[offset]
+    const y = positionAttribute.array[offset + 1]
+    const z = positionAttribute.array[offset + 2]
+
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      points.push({ x, y, z })
+    }
+  }
+
+  return points
+}
+
+function buildDefaultPointCloud() {
+  return buildMockPoints()
+}
+
+const INITIAL_DEFAULT_MOCK_POINT_CLOUD = buildDefaultPointCloud()
 
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
@@ -176,22 +302,81 @@ export const useDashboardStore = defineStore('dashboard', {
     detailLoading: false,
     detailRecord: null,
     exportingId: null,
-    pointCloudPoints: buildMockPoints(),
+    defaultMockPointCloud: INITIAL_DEFAULT_MOCK_POINT_CLOUD,
+    pointCloudPoints: INITIAL_DEFAULT_MOCK_POINT_CLOUD,
+    latestLivePointCloudPoints: [],
+    pointCloudDisplayMode: POINT_CLOUD_DISPLAY_MODES.MOCK,
     pointCloudStreamActive: false,
-    pointCloudLastMessageAt: 0
+    pointCloudLastMessageAt: 0,
+    autoAssemblyActive: false,
+    autoAssemblySegmentCount: 0,
+    autoAssemblyPoints: [],
+    autoAssemblySegmentCenters: [...AUTO_SEGMENT_CENTERS],
+    testModeEnabled: false,
+    testState: TEST_MODE_STATES.IDLE,
+    triggerCount: 0,
+    cooldownUntil: 0,
+    testAssemblyPoints: [],
+    pcdLoadSequenceToken: 0
   }),
   actions: {
     setRosConnected(status) {
       this.rosConnected = status
     },
+    restoreDefaultPointCloud() {
+      if (this.testModeEnabled) {
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+        this.pointCloudPoints = this.testAssemblyPoints.slice()
+        return
+      }
+
+      if (this.autoAssemblyActive) {
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
+        this.pointCloudPoints = this.autoAssemblyPoints.slice()
+        return
+      }
+
+      if (this.pointCloudStreamActive && this.latestLivePointCloudPoints.length) {
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.LIVE_STREAM
+        this.pointCloudPoints = this.latestLivePointCloudPoints.slice()
+        return
+      }
+
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.MOCK
+      this.pointCloudPoints = this.defaultMockPointCloud
+    },
+    regenerateDefaultMockPointCloud() {
+      this.defaultMockPointCloud = buildDefaultPointCloud()
+      if (this.pointCloudDisplayMode === POINT_CLOUD_DISPLAY_MODES.MOCK) {
+        this.pointCloudPoints = this.defaultMockPointCloud
+      }
+    },
     setPointCloudPoints(points) {
-      this.pointCloudPoints = Array.isArray(points) && points.length ? points : buildMockPoints()
+      const normalized = Array.isArray(points) && points.length ? points : []
+      if (!normalized.length) {
+        return
+      }
+
+      this.latestLivePointCloudPoints = normalized
+      if (
+        this.pointCloudDisplayMode === POINT_CLOUD_DISPLAY_MODES.MOCK
+        || this.pointCloudDisplayMode === POINT_CLOUD_DISPLAY_MODES.LIVE_STREAM
+      ) {
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.LIVE_STREAM
+        this.pointCloudPoints = normalized
+      }
     },
     setPointCloudStreamActive(active) {
       this.pointCloudStreamActive = Boolean(active)
       if (!active) {
-        this.pointCloudPoints = buildMockPoints()
+        this.latestLivePointCloudPoints = []
         this.pointCloudLastMessageAt = 0
+        if (
+          this.pointCloudDisplayMode === POINT_CLOUD_DISPLAY_MODES.LIVE_STREAM
+          || this.pointCloudDisplayMode === POINT_CLOUD_DISPLAY_MODES.MOCK
+        ) {
+          this.restoreDefaultPointCloud()
+        }
       }
     },
     markPointCloudMessageReceived(timestamp = Date.now()) {
@@ -201,11 +386,141 @@ export const useDashboardStore = defineStore('dashboard', {
     resetRealtimeStreams() {
       this.pointCloudStreamActive = false
       this.pointCloudLastMessageAt = 0
-      this.pointCloudPoints = buildMockPoints()
+      this.latestLivePointCloudPoints = []
+      this.restoreDefaultPointCloud()
+    },
+    startAutoAssembly() {
+      if (this.testModeEnabled) {
+        return false
+      }
+
+      this.autoAssemblyActive = true
+      this.autoAssemblySegmentCount = 0
+      this.autoAssemblyPoints = []
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
+      this.pointCloudPoints = []
+      return true
+    },
+    appendNextAutoAssemblySegment() {
+      if (!this.autoAssemblyActive || this.autoAssemblySegmentCount >= this.autoAssemblySegmentCenters.length) {
+        return false
+      }
+
+      const centerZ = this.autoAssemblySegmentCenters[this.autoAssemblySegmentCount]
+      const segmentPoints = buildAutoSegmentPoints(centerZ)
+      this.autoAssemblyPoints = this.autoAssemblyPoints.concat(segmentPoints)
+      this.autoAssemblySegmentCount += 1
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
+      this.pointCloudPoints = this.autoAssemblyPoints.slice()
+      return true
+    },
+    resetAutoAssembly(restoreDisplay = true) {
+      this.autoAssemblyActive = false
+      this.autoAssemblySegmentCount = 0
+      this.autoAssemblyPoints = []
+      if (restoreDisplay) {
+        this.restoreDefaultPointCloud()
+      }
+    },
+    setTestModeEnabled(enabled) {
+      const nextValue = Boolean(enabled)
+      this.pcdLoadSequenceToken += 1
+      this.cooldownUntil = 0
+
+      if (nextValue) {
+        this.resetAutoAssembly(false)
+        this.testModeEnabled = true
+        this.testState = TEST_MODE_STATES.WAITING_START
+        this.triggerCount = 0
+        this.testAssemblyPoints = []
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+        this.pointCloudPoints = []
+        return
+      }
+
+      this.testModeEnabled = false
+      this.testState = TEST_MODE_STATES.IDLE
+      this.triggerCount = 0
+      this.testAssemblyPoints = []
+      this.restoreDefaultPointCloud()
+    },
+    advancePcdLoadSequenceToken() {
+      this.pcdLoadSequenceToken += 1
+      return this.pcdLoadSequenceToken
+    },
+    beginTestSystemStart() {
+      if (!this.testModeEnabled) {
+        return false
+      }
+      this.testState = TEST_MODE_STATES.STARTING_SYSTEM
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+      this.pointCloudPoints = []
+      return true
+    },
+    setTestWaitingTrigger() {
+      if (this.testModeEnabled) {
+        this.testState = TEST_MODE_STATES.WAITING_TRIGGER
+      }
+    },
+    beginTestCaptureProcessing() {
+      if (!this.testModeEnabled) {
+        return false
+      }
+      this.testState = TEST_MODE_STATES.PROCESSING_CAPTURE
+      return true
+    },
+    async loadAndAppendTestCapture(stopNumber) {
+      const stopId = formatStopId(stopNumber)
+      const arrayBuffer = await fetchPipeDatasetPointCloud(stopId)
+      const parsedPoints = parsePcdArrayBuffer(arrayBuffer)
+      if (!parsedPoints.length) {
+        throw new Error(`PCD file ${stopId} contains no valid points`)
+      }
+
+      const centeredPoints = centerPointsAtOrigin(parsedPoints)
+      const targetZ = getTestSegmentTargetZ(stopNumber)
+      const translatedPoints = centeredPoints.map((point) => ({
+        x: point.x,
+        y: point.y,
+        z: point.z + targetZ
+      }))
+
+      this.testAssemblyPoints = this.testAssemblyPoints.concat(translatedPoints)
+      this.triggerCount = stopNumber
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+      this.pointCloudPoints = this.testAssemblyPoints.slice()
+      this.testState = stopNumber >= TEST_CAPTURE_MAX_COUNT
+        ? TEST_MODE_STATES.READY_FINISH
+        : TEST_MODE_STATES.WAITING_TRIGGER
+      return translatedPoints.length
+    },
+    beginTestCooldown(untilTimestamp) {
+      this.testState = TEST_MODE_STATES.COOLDOWN
+      this.cooldownUntil = Number(untilTimestamp || 0)
+    },
+    finishTestCooldown() {
+      if (!this.testModeEnabled) {
+        return
+      }
+
+      this.triggerCount = 0
+      this.cooldownUntil = 0
+      this.testAssemblyPoints = []
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
+      this.pointCloudPoints = []
+      this.testState = TEST_MODE_STATES.WAITING_TRIGGER
     },
     setPatrolModeByState(isManual) {
-      this.patrolMode = normalizeMode(isManual)
+      const nextMode = normalizeMode(isManual)
+      const previousMode = this.patrolMode
+      this.patrolMode = nextMode
       this.pendingPatrolMode = ''
+      if (isManual && previousMode !== 'manual') {
+        this.resetAutoAssembly(false)
+        if (!this.testModeEnabled) {
+          this.restoreDefaultPointCloud()
+        }
+      }
     },
     setPendingPatrolMode(mode) {
       this.pendingPatrolMode = mode

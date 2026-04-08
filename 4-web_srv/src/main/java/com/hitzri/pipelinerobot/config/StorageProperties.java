@@ -8,6 +8,7 @@ public class StorageProperties {
     private String rootDir;
     private String videoDir;
     private String imageDir;
+    private String pipeDatasetRoot;
     private String publicUrlPrefix;
 
     public String getRootDir() {
@@ -32,6 +33,14 @@ public class StorageProperties {
 
     public void setImageDir(String imageDir) {
         this.imageDir = imageDir;
+    }
+
+    public String getPipeDatasetRoot() {
+        return pipeDatasetRoot;
+    }
+
+    public void setPipeDatasetRoot(String pipeDatasetRoot) {
+        this.pipeDatasetRoot = pipeDatasetRoot;
     }
 
     public String getPublicUrlPrefix() {

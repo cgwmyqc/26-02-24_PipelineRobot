@@ -13,9 +13,11 @@ setup(
         (f'share/{package_name}', ['package.xml']),
         (f'share/{package_name}/launch', ['launch/ui_call_sh.launch.py']),
         (f'share/{package_name}/scripts', [
-            'scripts/test.sh',
+            'scripts/start_pipe_system.sh',
+            'scripts/trigger_stop_capture.sh',
             'scripts/triger_stop_capture.sh',
             'scripts/end_pipe_postprocess.sh',
+            'scripts/stop_pipe_system.sh',
         ]),
     ],
     install_requires=['setuptools'],
