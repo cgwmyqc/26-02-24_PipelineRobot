@@ -125,3 +125,9 @@ docker-data/
 # =========================================
 9-ui_call_sh/install
 9-ui_call_sh/log
+
+
+# java
+target/
+build/
+out/
