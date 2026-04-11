@@ -95,7 +95,7 @@ IPAddress client_ip(192, 168, 1, 177);
 IPAddress dns(192, 168, 1, 1);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress netmask(255, 255, 255, 0);
-IPAddress agent_ip(192, 168, 1, 199);
+IPAddress agent_ip(192, 168, 1, 132);
 const uint16_t agent_port = 8888;
 const uint16_t client_port = 8889;
 
