@@ -8,10 +8,15 @@ public class StorageProperties {
     private String rootDir;
     private String videoDir;
     private String imageDir;
+    private String pointsDir;
+    private String resultsDir;
+    private String sessionsDir;
     private String otaDir;
     private String pipeDatasetRoot;
     private String publicUrlPrefix;
     private String otaPublicBaseUrl;
+    private String ffmpegBin;
+    private String cameraRtspUrl;
 
     public String getRootDir() {
         return rootDir;
@@ -35,6 +40,30 @@ public class StorageProperties {
 
     public void setImageDir(String imageDir) {
         this.imageDir = imageDir;
+    }
+
+    public String getPointsDir() {
+        return pointsDir;
+    }
+
+    public void setPointsDir(String pointsDir) {
+        this.pointsDir = pointsDir;
+    }
+
+    public String getResultsDir() {
+        return resultsDir;
+    }
+
+    public void setResultsDir(String resultsDir) {
+        this.resultsDir = resultsDir;
+    }
+
+    public String getSessionsDir() {
+        return sessionsDir;
+    }
+
+    public void setSessionsDir(String sessionsDir) {
+        this.sessionsDir = sessionsDir;
     }
 
     public String getOtaDir() {
@@ -67,5 +96,21 @@ public class StorageProperties {
 
     public void setOtaPublicBaseUrl(String otaPublicBaseUrl) {
         this.otaPublicBaseUrl = otaPublicBaseUrl;
+    }
+
+    public String getFfmpegBin() {
+        return ffmpegBin;
+    }
+
+    public void setFfmpegBin(String ffmpegBin) {
+        this.ffmpegBin = ffmpegBin;
+    }
+
+    public String getCameraRtspUrl() {
+        return cameraRtspUrl;
+    }
+
+    public void setCameraRtspUrl(String cameraRtspUrl) {
+        this.cameraRtspUrl = cameraRtspUrl;
     }
 }

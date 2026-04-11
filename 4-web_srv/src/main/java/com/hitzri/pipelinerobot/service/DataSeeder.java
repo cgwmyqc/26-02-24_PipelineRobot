@@ -57,15 +57,16 @@ public class DataSeeder implements CommandLineRunner {
         LocalDate startDate = LocalDate.of(2026, 3, 20);
         for (int index = 1; index <= 10; index++) {
             LocalDate currentDate = startDate.minusDays(index - 1L);
+            String ts = String.format("%s%02d", currentDate.toString().replace("-", ""), index);
             writePlaceholder(
-                String.format("videos/inspection-%s-%02d.mp4", currentDate, index),
+                String.format("results/%s/videos/inspection-%s-%02d.mp4", ts, currentDate, index),
                 "demo video placeholder " + index
             );
         }
 
         for (int index = 1; index <= 6; index++) {
             writePlaceholder(
-                String.format("images/anomaly-202603-%02d.jpg", index),
+                String.format("results/20260320%02d/images/anomaly-202603-%02d.jpg", index, index),
                 "demo image placeholder " + index
             );
         }

@@ -77,6 +77,26 @@
               </button>
             </div>
 
+            <div class="manual-actions hud-panel hud-block">
+              <button
+                class="image-action-btn"
+                :class="{ inactive: !isManualMode }"
+                :disabled="!isManualMode"
+                @click="toggleManualRecording"
+              >
+                <img :src="recordButtonImage" alt="录制按钮">
+              </button>
+
+              <button
+                class="image-action-btn"
+                :class="{ inactive: !isManualMode || !manualRecordingActive }"
+                :disabled="!isManualMode || !manualRecordingActive"
+                @click="captureManualSnapshot"
+              >
+                <img :src="captureButtonImage" alt="拍照按钮">
+              </button>
+            </div>
+
             <div v-if="testModeEnabled" class="test-actions hud-panel hud-block">
               <div class="test-meta">
                 <span>状态：{{ testStateLabel }}</span>
@@ -181,6 +201,9 @@ const props = defineProps({
   setPatrolMode: Function,
   publishMoveCommand: Function,
   startAutoInspection: Function,
+  manualRecordingActive: Boolean,
+  toggleManualRecording: Function,
+  captureManualSnapshot: Function,
   publishUiScriptCommand: Function,
   testModeEnabled: Boolean,
   testState: String,
@@ -201,6 +224,9 @@ const startInactiveImage = resolveImageAsset('btn_start_disacitve')
 const temperatureImage = resolveImageAsset('temperature')
 const humidityImage = resolveImageAsset('hum')
 const mudheightImage = resolveImageAsset('mudheight')
+const recordStopImage = resolveImageAsset('record_stop')
+const recordIngImage = resolveImageAsset('record_ing')
+const captureButtonImage = resolveImageAsset('capture')
 
 const isManualMode = computed(() => props.patrolMode === 'manual')
 const isAutoMode = computed(() => props.patrolMode === 'auto')
@@ -220,6 +246,7 @@ const humidityText = computed(() => `${formatValue(props.humidity, 1)} %`)
 const forwardButtonImage = computed(() => (isManualMode.value ? forwardActiveImage : forwardInactiveImage))
 const reverseButtonImage = computed(() => (isManualMode.value ? reverseActiveImage : reverseInactiveImage))
 const startButtonImage = computed(() => (isAutoMode.value ? startActiveImage : startInactiveImage))
+const recordButtonImage = computed(() => (props.manualRecordingActive ? recordIngImage : recordStopImage))
 
 const testModeModel = computed({
   get: () => Boolean(props.testModeEnabled),
@@ -419,6 +446,16 @@ function toggleMove(direction, active) {
   border-radius: 18px;
 }
 
+.manual-actions {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 16px;
+  min-height: 240px;
+  padding: 16px 10px;
+  border-radius: 18px;
+}
+
 .test-meta {
   display: grid;
   gap: 6px;
@@ -580,6 +617,12 @@ function toggleMove(direction, active) {
   .motion-actions {
     grid-auto-flow: column;
     grid-template-columns: repeat(3, 53px);
+    min-height: auto;
+  }
+
+  .manual-actions {
+    grid-auto-flow: column;
+    grid-template-columns: repeat(2, 53px);
     min-height: auto;
   }
 

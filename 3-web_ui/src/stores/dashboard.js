@@ -6,7 +6,8 @@ import { appConfig } from '../config/app'
 
 const MODE_MAP = {
   0: '手动',
-  1: '自动'
+  1: '自动',
+  2: '测试'
 }
 
 const ENVIRONMENT_MAP = {
@@ -18,6 +19,14 @@ const RESULT_MAP = {
   0: '无异常',
   1: '裂缝预警',
   2: '淤泥预警'
+}
+
+const ANOMALY_MAP = {
+  PL: '破裂',
+  BX: '变形',
+  SG: '树根',
+  ZAW: '阻碍物',
+  RG: '人工捕获'
 }
 
 export const POINT_CLOUD_DISPLAY_MODES = Object.freeze({
@@ -86,6 +95,33 @@ function normalizeHistoryRecord(record) {
 }
 
 function normalizeDetailRecord(record) {
+  const videos = Array.isArray(record?.videos)
+    ? record.videos.map((item) => ({
+        ...item,
+        fileUrl: normalizeAssetUrl(item?.fileUrl)
+      }))
+    : []
+  const images = Array.isArray(record?.images)
+    ? record.images.map((item) => ({
+        ...item,
+        fileUrl: normalizeAssetUrl(item?.fileUrl)
+      }))
+    : []
+  const points = Array.isArray(record?.points)
+    ? record.points.map((item) => ({
+        ...item,
+        fileUrl: normalizeAssetUrl(item?.fileUrl)
+      }))
+    : []
+
+  const anomalies = Array.isArray(record?.anomalies)
+    ? record.anomalies.map((item) => ({
+        ...item,
+        anomalyType: mapAnomalyType(item?.anomalyType),
+        imageUrl: normalizeAssetUrl(item?.imageUrl)
+      }))
+    : []
+
   return {
     ...record,
     mode: mapCode(record?.mode, MODE_MAP),
@@ -95,14 +131,31 @@ function normalizeDetailRecord(record) {
     createdAt: formatDateOnly(record?.createdAt),
     inspectionTime: formatDateOnly(record?.inspectionTime),
     videoUrl: normalizeAssetUrl(record?.videoUrl),
-    anomalies: Array.isArray(record?.anomalies)
-      ? record.anomalies.map((item) => ({
-          ...item,
-          anomalyType: mapCode(item?.anomalyType, RESULT_MAP),
-          imageUrl: normalizeAssetUrl(item?.imageUrl)
-        }))
-      : []
+    videos,
+    images,
+    points,
+    anomalies
   }
+}
+
+function mapAnomalyType(value) {
+  if (!value) {
+    return '未知'
+  }
+  const normalized = String(value).trim().toUpperCase()
+  if (!normalized) {
+    return '未知'
+  }
+
+  if (ANOMALY_MAP[normalized]) {
+    return ANOMALY_MAP[normalized]
+  }
+
+  if (normalized.includes('+')) {
+    return normalized.split('+').map((item) => ANOMALY_MAP[item] || item).join('+')
+  }
+
+  return ANOMALY_MAP[normalized] || normalized
 }
 
 const mockHistory = [

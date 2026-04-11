@@ -35,4 +35,5 @@ Camera-related ROS2 packages should be launched directly in the host ROS environ
 
 - `compose/docker-compose.dev.yml` is still kept as a legacy rollback file, but it is not the main entrypoint.
 - MySQL init scripts under `mysql/init/` only run when the MySQL data volume is empty for the first time.
+- In the current development phase, if schema changes break compatibility, rebuild the MySQL volume directly so `mysql/init/` can recreate the latest schema and demo data.
 - A backup of the previous main compose file should be kept under `5-docker/bak/` before further migration edits.

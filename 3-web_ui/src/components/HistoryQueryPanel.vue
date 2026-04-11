@@ -8,6 +8,7 @@
             <el-radio value="">全部</el-radio>
             <el-radio value="1">自动巡检</el-radio>
             <el-radio value="0">人工巡检</el-radio>
+            <el-radio value="2">测试模式</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item>

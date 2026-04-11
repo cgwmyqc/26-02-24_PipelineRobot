@@ -21,7 +21,11 @@ public class StorageConfigurationLogger implements CommandLineRunner {
     @Override
     public void run(String... args) {
         log.info("Storage root directory: {}", resolvePath(storageProperties.getRootDir()));
+        log.info("Storage results directory: {}", storageProperties.getResultsDir());
+        log.info("Storage session directory: {}", storageProperties.getSessionsDir());
         log.info("Pipe dataset root directory: {}", resolvePath(storageProperties.getPipeDatasetRoot()));
+        log.info("FFmpeg binary configured: {}", storageProperties.getFfmpegBin());
+        log.info("Camera RTSP URL configured: {}", storageProperties.getCameraRtspUrl());
         log.info("PIPE_DATASET_ROOT environment variable: {}", System.getenv().getOrDefault("PIPE_DATASET_ROOT", "<not set>"));
     }
 

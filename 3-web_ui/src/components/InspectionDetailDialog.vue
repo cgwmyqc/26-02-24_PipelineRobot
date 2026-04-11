@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <el-dialog
     :model-value="visible"
     width="min(960px, 92vw)"
@@ -38,26 +38,46 @@
 
         <section class="detail-card video-card">
           <div class="section-title">巡检视频</div>
-          <video v-if="record?.videoUrl" :src="record.videoUrl" controls class="video-player"></video>
+          <video
+            v-if="primaryVideoUrl"
+            :src="primaryVideoUrl"
+            controls
+            class="video-player"
+          ></video>
           <div v-else class="empty-state">当前记录未配置视频</div>
+
+          <div v-if="videoList.length > 1" class="asset-list">
+            <button
+              v-for="item in videoList"
+              :key="item.filePath || item.fileUrl"
+              class="asset-item"
+              type="button"
+              @click="activeVideo = item.fileUrl"
+            >
+              {{ item.fileName || item.filePath || '视频文件' }}
+            </button>
+          </div>
         </section>
       </div>
 
       <section class="detail-card image-card">
         <div class="section-title">异常图片</div>
-        <div v-if="record?.anomalies?.length" class="image-grid">
+        <div v-if="imageList.length" class="image-grid">
           <button
-            v-for="item in record.anomalies"
-            :key="item.id"
+            v-for="item in imageList"
+            :key="item.id || item.filePath || item.imageUrl"
             type="button"
             class="image-tile"
-            @click="activeImage = item.imageUrl"
+            @click="activeImage = item.fileUrl || item.imageUrl"
           >
-            <img v-if="item.imageUrl" :src="item.imageUrl" :alt="item.anomalyType || '异常图片'" />
+            <img
+              v-if="item.fileUrl || item.imageUrl"
+              :src="item.fileUrl || item.imageUrl"
+              :alt="getAnomalyLabel(item.anomalyType)"
+            />
             <div v-else class="tile-empty">暂无图片</div>
             <div class="image-caption">
-              <strong>{{ item.anomalyType || '异常' }}</strong>
-              <span>{{ item.remark || '未填写备注' }}</span>
+              <strong>{{ getAnomalyLabel(item.anomalyType) }}</strong>
             </div>
           </button>
         </div>
@@ -68,12 +88,43 @@
         <div class="section-title">图片预览</div>
         <img :src="activeImage" alt="异常图片预览" class="preview-image" />
       </section>
+
+      <section class="detail-card point-card">
+        <div class="section-title">点云数据</div>
+        <div v-if="pointList.length" class="point-content">
+          <div v-if="pointList.length > 1" class="asset-list">
+            <button
+              v-for="item in pointList"
+              :key="item.filePath || item.fileUrl"
+              type="button"
+              class="asset-item"
+              :class="{ active: activePointKey === getPointItemKey(item) }"
+              @click="setActivePointFile(item)"
+            >
+              {{ item.fileName || item.filePath || '点云文件' }}
+            </button>
+          </div>
+
+          <div v-if="pointCloudLoading" class="point-placeholder">点云文件加载中...</div>
+          <div v-else-if="pointCloudLoadError" class="point-placeholder">
+            {{ pointCloudLoadError }}
+          </div>
+          <div v-else-if="detailPointCloudPoints.length" class="point-scene-wrap">
+            <PointCloudScene :points="detailPointCloudPoints" mode="raw" />
+          </div>
+          <div v-else class="point-placeholder">当前记录暂无可展示的点云数据</div>
+        </div>
+        <div v-else class="empty-state">当前记录暂无点云文件</div>
+      </section>
     </div>
   </el-dialog>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { PCDLoader } from 'three/examples/jsm/loaders/PCDLoader.js'
+import PointCloudScene from './PointCloudScene.vue'
+import request from '../utils/request'
 
 const props = defineProps({
   visible: {
@@ -92,12 +143,168 @@ const props = defineProps({
 
 defineEmits(['close'])
 
+const ANOMALY_MAP = Object.freeze({
+  PL: '破裂',
+  BX: '变形',
+  SG: '树根',
+  ZAW: '阻碍物',
+  RG: '人工捕获'
+})
+const MAX_IMPORTED_PCD_POINTS = 5000
+const pcdLoader = new PCDLoader()
+
 const activeImage = ref('')
+const activeVideo = ref('')
+const activePointFile = ref(null)
+const pointCloudLoading = ref(false)
+const pointCloudLoadError = ref('')
+const detailPointCloudPoints = ref([])
+
+const videoList = computed(() => {
+  if (Array.isArray(props.record?.videos) && props.record.videos.length) {
+    return props.record.videos
+  }
+  if (props.record?.videoUrl) {
+    return [{ fileUrl: props.record.videoUrl, fileName: '巡检视频' }]
+  }
+  return []
+})
+
+const imageList = computed(() => {
+  if (Array.isArray(props.record?.images) && props.record.images.length) {
+    return props.record.images
+  }
+  if (Array.isArray(props.record?.anomalies) && props.record.anomalies.length) {
+    return props.record.anomalies
+  }
+  return []
+})
+
+const pointList = computed(() => {
+  if (Array.isArray(props.record?.points) && props.record.points.length) {
+    return props.record.points
+  }
+  return []
+})
+const activePointKey = computed(() => getPointItemKey(activePointFile.value))
+
+const primaryVideoUrl = computed(() => {
+  if (activeVideo.value) {
+    return activeVideo.value
+  }
+  return videoList.value[0]?.fileUrl || ''
+})
+
+function mapAnomalyType(value) {
+  const normalized = String(value || '').trim().toUpperCase()
+  if (!normalized) {
+    return '异常'
+  }
+
+  const parts = normalized
+    .split('+')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  if (!parts.length) {
+    return normalized || '异常'
+  }
+
+  return parts.map((item) => ANOMALY_MAP[item] || item).join(' / ')
+}
+
+function getAnomalyLabel(value) {
+  return mapAnomalyType(value)
+}
+
+function getPointItemKey(item) {
+  if (!item) {
+    return ''
+  }
+  return item.filePath || item.fileUrl || item.fileName || ''
+}
+
+function parsePcdArrayBuffer(arrayBuffer) {
+  const parsed = pcdLoader.parse(arrayBuffer, '')
+  const positionAttribute = parsed?.geometry?.getAttribute('position')
+  if (!positionAttribute?.array?.length) {
+    return []
+  }
+
+  const step = Math.max(1, Math.ceil(positionAttribute.count / MAX_IMPORTED_PCD_POINTS))
+  const points = []
+
+  for (let index = 0; index < positionAttribute.count; index += step) {
+    const offset = index * 3
+    const x = positionAttribute.array[offset]
+    const y = positionAttribute.array[offset + 1]
+    const z = positionAttribute.array[offset + 2]
+
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      points.push({ x, y, z })
+    }
+  }
+
+  return points
+}
+
+async function loadPointCloud(item) {
+  const fileUrl = item?.fileUrl
+  if (!fileUrl) {
+    detailPointCloudPoints.value = []
+    pointCloudLoadError.value = '当前点云文件地址无效'
+    return
+  }
+
+  pointCloudLoading.value = true
+  pointCloudLoadError.value = ''
+
+  try {
+    const response = await request.get(fileUrl, {
+      responseType: 'arraybuffer',
+      baseURL: ''
+    })
+    const points = parsePcdArrayBuffer(response.data)
+    if (!points.length) {
+      throw new Error('点云文件中没有可用点数据')
+    }
+    detailPointCloudPoints.value = points
+  } catch (error) {
+    detailPointCloudPoints.value = []
+    pointCloudLoadError.value = error?.message || '点云文件加载失败'
+  } finally {
+    pointCloudLoading.value = false
+  }
+}
+
+function setActivePointFile(item) {
+  activePointFile.value = item || null
+}
 
 watch(
   () => props.record,
   (value) => {
-    activeImage.value = value?.anomalies?.[0]?.imageUrl || ''
+    activeVideo.value = value?.videos?.[0]?.fileUrl || value?.videoUrl || ''
+    const firstImage = value?.images?.[0]?.fileUrl || value?.anomalies?.[0]?.imageUrl || ''
+    activeImage.value = firstImage
+    activePointFile.value = value?.points?.[0] || null
+    detailPointCloudPoints.value = []
+    pointCloudLoadError.value = ''
+    pointCloudLoading.value = false
+  },
+  { immediate: true }
+)
+
+watch(
+  () => activePointFile.value,
+  (value) => {
+    detailPointCloudPoints.value = []
+    pointCloudLoadError.value = ''
+    if (!value) {
+      pointCloudLoading.value = false
+      return
+    }
+    loadPointCloud(value)
   },
   { immediate: true }
 )
@@ -161,7 +368,7 @@ watch(
 
 .video-player {
   width: 100%;
-  min-height: 320px;
+  min-height: 260px;
   background: #07111d;
 }
 
@@ -198,13 +405,8 @@ watch(
 
 .image-caption {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   padding: 12px;
-}
-
-.image-caption span {
-  color: var(--text-dim);
-  font-size: 13px;
 }
 
 .preview-image {
@@ -212,6 +414,51 @@ watch(
   max-height: 420px;
   object-fit: contain;
   background: #07111d;
+}
+
+.asset-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.asset-item,
+.asset-link {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(103, 212, 255, 0.2);
+  background: rgba(12, 24, 38, 0.8);
+  color: var(--text-primary);
+  text-align: left;
+  text-decoration: none;
+}
+
+.asset-item {
+  cursor: pointer;
+}
+
+.asset-item.active {
+  border-color: rgba(117, 240, 194, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 194, 0.18);
+}
+
+.point-content {
+  display: grid;
+  gap: 12px;
+}
+
+.point-scene-wrap {
+  min-height: 340px;
+}
+
+.point-placeholder {
+  min-height: 340px;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  border: 1px dashed rgba(103, 212, 255, 0.16);
+  background: rgba(12, 24, 38, 0.46);
 }
 
 @media (max-width: 900px) {

@@ -33,9 +33,14 @@ app:
     root-dir: ${STORAGE_ROOT:storage}
     video-dir: ${VIDEO_DIR:videos}
     image-dir: ${IMAGE_DIR:images}
+    points-dir: ${POINTS_DIR:points}
+    results-dir: ${RESULTS_DIR:results}
+    sessions-dir: ${SESSIONS_DIR:.sessions}
     ota-dir: ${OTA_DIR:ota}
     pipe-dataset-root: ${PIPE_DATASET_ROOT:/home/hit/pipe_dataset}
     public-url-prefix: /api/files
     ota-public-base-url: ${OTA_PUBLIC_BASE_URL:http://192.168.1.132:8080/api}
+    ffmpeg-bin: ${FFMPEG_BIN:/usr/bin/ffmpeg}
+    camera-rtsp-url: ${CAMERA_RTSP_URL:rtsp://test:hitzri123@192.168.1.64:554/Streaming/Channels/101}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.132:5173}

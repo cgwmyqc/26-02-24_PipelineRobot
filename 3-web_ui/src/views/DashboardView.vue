@@ -23,6 +23,9 @@
               :set-patrol-mode="setPatrolMode"
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
+              :manual-recording-active="manualRecordingActive"
+              :toggle-manual-recording="toggleManualRecording"
+              :capture-manual-snapshot="captureManualSnapshot"
               :publish-ui-script-command="publishUiScriptCommand"
               :test-mode-enabled="testModeEnabled"
               :test-state="testState"
@@ -160,6 +163,9 @@ const {
   setPatrolMode,
   publishMoveCommand,
   startAutoInspection,
+  manualRecordingActive,
+  toggleManualRecording,
+  captureManualSnapshot,
   publishUiScriptCommand,
   setTestModeEnabled,
   startTestSequence,

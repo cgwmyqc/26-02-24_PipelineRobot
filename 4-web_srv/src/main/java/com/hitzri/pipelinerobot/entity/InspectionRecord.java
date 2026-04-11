@@ -14,6 +14,7 @@ public class InspectionRecord {
     private String environment;
     private String operatorName;
     private String resultSummary;
+    private String resultDir;
     private String videoPath;
     private LocalDateTime inspectionTime;
     private LocalDateTime createdAt;
@@ -28,6 +29,8 @@ public class InspectionRecord {
     public void setOperatorName(String operatorName) { this.operatorName = operatorName; }
     public String getResultSummary() { return resultSummary; }
     public void setResultSummary(String resultSummary) { this.resultSummary = resultSummary; }
+    public String getResultDir() { return resultDir; }
+    public void setResultDir(String resultDir) { this.resultDir = resultDir; }
     public String getVideoPath() { return videoPath; }
     public void setVideoPath(String videoPath) { this.videoPath = videoPath; }
     public LocalDateTime getInspectionTime() { return inspectionTime; }

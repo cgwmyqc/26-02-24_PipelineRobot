@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS inspection_record (
   environment VARCHAR(64) NOT NULL,
   operator_name VARCHAR(128) NOT NULL,
   result_summary VARCHAR(255) NOT NULL,
+  result_dir VARCHAR(255),
   video_path VARCHAR(255),
   inspection_time DATETIME NOT NULL,
   created_at DATETIME NOT NULL
@@ -27,4 +28,12 @@ CREATE TABLE IF NOT EXISTS inspection_anomaly_image (
   remark VARCHAR(255),
   captured_at DATETIME NOT NULL,
   CONSTRAINT fk_inspection_record FOREIGN KEY (inspection_id) REFERENCES inspection_record(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS inspection_point_file (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  inspection_id BIGINT NOT NULL,
+  point_path VARCHAR(255) NOT NULL,
+  captured_at DATETIME NOT NULL,
+  CONSTRAINT fk_point_inspection_record FOREIGN KEY (inspection_id) REFERENCES inspection_record(id) ON DELETE CASCADE
 );

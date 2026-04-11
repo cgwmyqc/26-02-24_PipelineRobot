@@ -2,9 +2,10 @@ package com.hitzri.pipelinerobot.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hitzri.pipelinerobot.service.InspectionService;
-import java.nio.file.NoSuchFileException;
+import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,12 +30,34 @@ public class FileController {
         this.inspectionService = inspectionService;
     }
 
-    @GetMapping("/{category}/{filename:.+}")
-    public ResponseEntity<Resource> getFile(@PathVariable String category, @PathVariable String filename) throws IOException {
-        Path path = inspectionService.resolveStoragePath(category + "/" + filename);
-        if (!Files.exists(path)) {
-            throw new IllegalArgumentException("文件不存在");
+    @GetMapping("/media/**")
+    public ResponseEntity<Resource> getMediaFile(HttpServletRequest request) throws IOException {
+        String uri = request.getRequestURI();
+        String marker = "/files/media/";
+        int markerIndex = uri.indexOf(marker);
+        if (markerIndex < 0) {
+            throw new IllegalArgumentException("无效文件路径");
         }
+
+        String relativePath = uri.substring(markerIndex + marker.length());
+        Path path = inspectionService.resolveStoragePath(relativePath);
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw new NoSuchFileException("文件不存在: " + relativePath);
+        }
+
+        return ResponseEntity.ok()
+            .contentType(resolveMediaType(path.getFileName().toString()))
+            .body(new FileSystemResource(path));
+    }
+
+    @GetMapping("/{category}/{filename:.+}")
+    public ResponseEntity<Resource> getLegacyFile(@PathVariable String category, @PathVariable String filename) throws IOException {
+        String relativePath = category + "/" + filename;
+        Path path = inspectionService.resolveStoragePath(relativePath);
+        if (!Files.exists(path)) {
+            throw new NoSuchFileException("文件不存在: " + relativePath);
+        }
+
         MediaType mediaType = category.equals("videos") ? MediaType.APPLICATION_OCTET_STREAM : MediaType.IMAGE_JPEG;
         return ResponseEntity.ok().contentType(mediaType).body(new FileSystemResource(path));
     }
@@ -61,5 +84,19 @@ public class FileController {
         return ResponseEntity.ok()
             .contentType(MediaType.APPLICATION_JSON)
             .body(result);
+    }
+
+    private MediaType resolveMediaType(String fileName) {
+        String normalized = String.valueOf(fileName).toLowerCase();
+        if (normalized.endsWith(".mp4")) {
+            return MediaType.valueOf("video/mp4");
+        }
+        if (normalized.endsWith(".pcd")) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        if (normalized.endsWith(".png")) {
+            return MediaType.IMAGE_PNG;
+        }
+        return MediaType.IMAGE_JPEG;
     }
 }

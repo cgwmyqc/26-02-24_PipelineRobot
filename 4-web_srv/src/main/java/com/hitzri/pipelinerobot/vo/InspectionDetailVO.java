@@ -12,8 +12,13 @@ public class InspectionDetailVO {
     private String result;
     private LocalDateTime inspectionTime;
     private LocalDateTime createdAt;
+
     private String videoUrl;
     private List<InspectionAnomalyImageVO> anomalies;
+
+    private List<InspectionMediaFileVO> videos;
+    private List<InspectionMediaFileVO> images;
+    private List<InspectionMediaFileVO> points;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -33,4 +38,10 @@ public class InspectionDetailVO {
     public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
     public List<InspectionAnomalyImageVO> getAnomalies() { return anomalies; }
     public void setAnomalies(List<InspectionAnomalyImageVO> anomalies) { this.anomalies = anomalies; }
+    public List<InspectionMediaFileVO> getVideos() { return videos; }
+    public void setVideos(List<InspectionMediaFileVO> videos) { this.videos = videos; }
+    public List<InspectionMediaFileVO> getImages() { return images; }
+    public void setImages(List<InspectionMediaFileVO> images) { this.images = images; }
+    public List<InspectionMediaFileVO> getPoints() { return points; }
+    public void setPoints(List<InspectionMediaFileVO> points) { this.points = points; }
 }

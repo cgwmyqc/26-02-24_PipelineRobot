@@ -6,12 +6,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hitzri.pipelinerobot.config.StorageProperties;
 import com.hitzri.pipelinerobot.entity.InspectionAnomalyImage;
+import com.hitzri.pipelinerobot.entity.InspectionPointFile;
 import com.hitzri.pipelinerobot.entity.InspectionRecord;
 import com.hitzri.pipelinerobot.mapper.InspectionAnomalyImageMapper;
+import com.hitzri.pipelinerobot.mapper.InspectionPointFileMapper;
 import com.hitzri.pipelinerobot.mapper.InspectionRecordMapper;
 import com.hitzri.pipelinerobot.vo.InspectionAnomalyImageVO;
 import com.hitzri.pipelinerobot.vo.InspectionDetailVO;
 import com.hitzri.pipelinerobot.vo.InspectionHistoryItemVO;
+import com.hitzri.pipelinerobot.vo.InspectionMediaFileVO;
 import com.hitzri.pipelinerobot.vo.PageResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,8 +27,16 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.slf4j.Logger;
@@ -45,17 +56,20 @@ public class InspectionService {
 
     private final InspectionRecordMapper inspectionRecordMapper;
     private final InspectionAnomalyImageMapper anomalyImageMapper;
+    private final InspectionPointFileMapper pointFileMapper;
     private final StorageProperties storageProperties;
     private final ObjectMapper objectMapper;
 
     public InspectionService(
         InspectionRecordMapper inspectionRecordMapper,
         InspectionAnomalyImageMapper anomalyImageMapper,
+        InspectionPointFileMapper pointFileMapper,
         StorageProperties storageProperties,
         ObjectMapper objectMapper
     ) {
         this.inspectionRecordMapper = inspectionRecordMapper;
         this.anomalyImageMapper = anomalyImageMapper;
+        this.pointFileMapper = pointFileMapper;
         this.storageProperties = storageProperties;
         this.objectMapper = objectMapper;
     }
@@ -88,9 +102,32 @@ public class InspectionService {
             throw new IllegalArgumentException("巡检记录不存在");
         }
 
-        LambdaQueryWrapper<InspectionAnomalyImage> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InspectionAnomalyImage::getInspectionId, id).orderByAsc(InspectionAnomalyImage::getCapturedAt);
-        List<InspectionAnomalyImageVO> anomalies = anomalyImageMapper.selectList(wrapper).stream().map(this::toAnomalyVO).toList();
+        LambdaQueryWrapper<InspectionAnomalyImage> imageQuery = new LambdaQueryWrapper<>();
+        imageQuery.eq(InspectionAnomalyImage::getInspectionId, id).orderByAsc(InspectionAnomalyImage::getCapturedAt);
+        List<InspectionAnomalyImage> imageEntities = anomalyImageMapper.selectList(imageQuery);
+        List<InspectionAnomalyImageVO> anomalies = imageEntities.stream().map(this::toAnomalyVO).toList();
+
+        LambdaQueryWrapper<InspectionPointFile> pointQuery = new LambdaQueryWrapper<>();
+        pointQuery.eq(InspectionPointFile::getInspectionId, id).orderByAsc(InspectionPointFile::getCapturedAt);
+        List<InspectionPointFile> pointEntities = pointFileMapper.selectList(pointQuery);
+
+        List<String> videoPaths = collectVideoPaths(record);
+        List<String> imagePaths = collectImagePaths(record, imageEntities);
+        List<String> pointPaths = collectPointPaths(record, pointEntities);
+
+        Map<String, LocalDateTime> imageCapturedAt = new LinkedHashMap<>();
+        for (InspectionAnomalyImage image : imageEntities) {
+            if (StringUtils.hasText(image.getImagePath())) {
+                imageCapturedAt.put(image.getImagePath(), image.getCapturedAt());
+            }
+        }
+
+        Map<String, LocalDateTime> pointCapturedAt = new LinkedHashMap<>();
+        for (InspectionPointFile pointFile : pointEntities) {
+            if (StringUtils.hasText(pointFile.getPointPath())) {
+                pointCapturedAt.put(pointFile.getPointPath(), pointFile.getCapturedAt());
+            }
+        }
 
         InspectionDetailVO vo = new InspectionDetailVO();
         vo.setId(record.getId());
@@ -100,8 +137,11 @@ public class InspectionService {
         vo.setResult(record.getResultSummary());
         vo.setInspectionTime(record.getInspectionTime());
         vo.setCreatedAt(record.getCreatedAt());
-        vo.setVideoUrl(buildPublicUrl(record.getVideoPath()));
+        vo.setVideoUrl(videoPaths.isEmpty() ? "" : buildPublicUrl(videoPaths.get(0)));
         vo.setAnomalies(anomalies);
+        vo.setVideos(toMediaVOs(videoPaths, record.getInspectionTime()));
+        vo.setImages(toMediaVOs(imagePaths, imageCapturedAt));
+        vo.setPoints(toMediaVOs(pointPaths, pointCapturedAt));
         return vo;
     }
 
@@ -111,15 +151,28 @@ public class InspectionService {
             throw new IllegalArgumentException("巡检记录不存在");
         }
 
-        LambdaQueryWrapper<InspectionAnomalyImage> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(InspectionAnomalyImage::getInspectionId, id).orderByAsc(InspectionAnomalyImage::getCapturedAt);
-        List<InspectionAnomalyImage> anomalies = anomalyImageMapper.selectList(wrapper);
+        LambdaQueryWrapper<InspectionAnomalyImage> imageQuery = new LambdaQueryWrapper<>();
+        imageQuery.eq(InspectionAnomalyImage::getInspectionId, id).orderByAsc(InspectionAnomalyImage::getCapturedAt);
+        List<InspectionAnomalyImage> imageEntities = anomalyImageMapper.selectList(imageQuery);
+
+        LambdaQueryWrapper<InspectionPointFile> pointQuery = new LambdaQueryWrapper<>();
+        pointQuery.eq(InspectionPointFile::getInspectionId, id).orderByAsc(InspectionPointFile::getCapturedAt);
+        List<InspectionPointFile> pointEntities = pointFileMapper.selectList(pointQuery);
+
+        List<String> videoPaths = collectVideoPaths(record);
+        List<String> imagePaths = collectImagePaths(record, imageEntities);
+        List<String> pointPaths = collectPointPaths(record, pointEntities);
 
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
         try (ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream)) {
-            writeFileToZip(zipOutputStream, record.getVideoPath(), "videos/");
-            for (InspectionAnomalyImage image : anomalies) {
-                writeFileToZip(zipOutputStream, image.getImagePath(), "images/");
+            for (String videoPath : videoPaths) {
+                writeFileToZip(zipOutputStream, videoPath, "videos/");
+            }
+            for (String imagePath : imagePaths) {
+                writeFileToZip(zipOutputStream, imagePath, "images/");
+            }
+            for (String pointPath : pointPaths) {
+                writeFileToZip(zipOutputStream, pointPath, "points/");
             }
         }
 
@@ -134,7 +187,12 @@ public class InspectionService {
     }
 
     public Path resolveStoragePath(String relativePath) {
-        return Paths.get(storageProperties.getRootDir()).resolve(relativePath).normalize();
+        Path root = resolveStorageRoot();
+        Path path = root.resolve(String.valueOf(relativePath)).normalize();
+        if (!path.startsWith(root)) {
+            throw new IllegalArgumentException("无效的存储路径");
+        }
+        return path;
     }
 
     public Path resolvePipeDatasetPointCloudPath(String stopId) {
@@ -173,18 +231,133 @@ public class InspectionService {
         return objectMapper.readTree(Files.newBufferedReader(filePath, StandardCharsets.UTF_8));
     }
 
+    public String buildPublicUrl(String relativePath) {
+        if (!StringUtils.hasText(relativePath)) {
+            return "";
+        }
+        String prefix = String.valueOf(storageProperties.getPublicUrlPrefix()).replaceAll("/+$", "");
+        return prefix + "/media/" + relativePath.replace('\\', '/');
+    }
+
     private void writeFileToZip(ZipOutputStream zipOutputStream, String relativePath, String prefix) throws IOException {
         if (!StringUtils.hasText(relativePath)) {
             return;
         }
+
         Path filePath = resolveStoragePath(relativePath);
         if (!Files.exists(filePath)) {
             throw new IllegalStateException("媒体文件不存在: " + relativePath);
         }
+
         ZipEntry entry = new ZipEntry(prefix + filePath.getFileName());
         zipOutputStream.putNextEntry(entry);
         Files.copy(filePath, zipOutputStream);
         zipOutputStream.closeEntry();
+    }
+
+    private List<String> collectVideoPaths(InspectionRecord record) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        if (StringUtils.hasText(record.getVideoPath())) {
+            paths.add(record.getVideoPath());
+        }
+        paths.addAll(scanResultDirFiles(record.getResultDir(), getVideoDir(), null));
+        return new ArrayList<>(paths);
+    }
+
+    private List<String> collectImagePaths(InspectionRecord record, List<InspectionAnomalyImage> imageEntities) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        for (InspectionAnomalyImage image : imageEntities) {
+            if (StringUtils.hasText(image.getImagePath())) {
+                paths.add(image.getImagePath());
+            }
+        }
+        paths.addAll(scanResultDirFiles(record.getResultDir(), getImageDir(), null));
+        return new ArrayList<>(paths);
+    }
+
+    private List<String> collectPointPaths(InspectionRecord record, List<InspectionPointFile> pointEntities) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+        for (InspectionPointFile pointFile : pointEntities) {
+            if (StringUtils.hasText(pointFile.getPointPath())) {
+                paths.add(pointFile.getPointPath());
+            }
+        }
+        paths.addAll(scanResultDirFiles(record.getResultDir(), getPointsDir(), path -> path.getFileName().toString().endsWith(".pcd")));
+        return new ArrayList<>(paths);
+    }
+
+    private List<String> scanResultDirFiles(String resultDir, String subDir, java.util.function.Predicate<Path> predicate) {
+        if (!StringUtils.hasText(resultDir) || !StringUtils.hasText(subDir)) {
+            return Collections.emptyList();
+        }
+
+        Path dir = resolveStoragePath(resultDir + "/" + subDir);
+        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+            return Collections.emptyList();
+        }
+
+        try (Stream<Path> stream = Files.list(dir)) {
+            return stream
+                .filter(Files::isRegularFile)
+                .filter(path -> predicate == null || predicate.test(path))
+                .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                .map(this::toRelativeStoragePath)
+                .toList();
+        } catch (IOException error) {
+            log.warn("Failed to scan result directory: {}", dir, error);
+            return Collections.emptyList();
+        }
+    }
+
+    private List<InspectionMediaFileVO> toMediaVOs(List<String> paths, LocalDateTime fallbackTime) {
+        List<InspectionMediaFileVO> result = new ArrayList<>();
+        for (String path : paths) {
+            InspectionMediaFileVO vo = new InspectionMediaFileVO();
+            vo.setFilePath(path);
+            vo.setFileName(Path.of(path).getFileName().toString());
+            vo.setFileUrl(buildPublicUrl(path));
+            vo.setCapturedAt(fallbackTime);
+            result.add(vo);
+        }
+        return result;
+    }
+
+    private List<InspectionMediaFileVO> toMediaVOs(List<String> paths, Map<String, LocalDateTime> capturedAtMap) {
+        List<InspectionMediaFileVO> result = new ArrayList<>();
+        for (String path : paths) {
+            InspectionMediaFileVO vo = new InspectionMediaFileVO();
+            vo.setFilePath(path);
+            vo.setFileName(Path.of(path).getFileName().toString());
+            vo.setFileUrl(buildPublicUrl(path));
+            vo.setCapturedAt(capturedAtMap.get(path));
+            result.add(vo);
+        }
+        return result;
+    }
+
+    private String toRelativeStoragePath(Path filePath) {
+        Path root = resolveStorageRoot();
+        Path normalized = filePath.toAbsolutePath().normalize();
+        if (!normalized.startsWith(root)) {
+            throw new IllegalArgumentException("无效的媒体文件路径");
+        }
+        return root.relativize(normalized).toString().replace('\\', '/');
+    }
+
+    private Path resolveStorageRoot() {
+        return Paths.get(storageProperties.getRootDir()).toAbsolutePath().normalize();
+    }
+
+    private String getVideoDir() {
+        return StringUtils.hasText(storageProperties.getVideoDir()) ? storageProperties.getVideoDir().trim() : "videos";
+    }
+
+    private String getImageDir() {
+        return StringUtils.hasText(storageProperties.getImageDir()) ? storageProperties.getImageDir().trim() : "images";
+    }
+
+    private String getPointsDir() {
+        return StringUtils.hasText(storageProperties.getPointsDir()) ? storageProperties.getPointsDir().trim() : "points";
     }
 
     private InspectionHistoryItemVO toHistoryItem(InspectionRecord record) {
@@ -207,13 +380,6 @@ public class InspectionService {
         vo.setCapturedAt(image.getCapturedAt());
         vo.setImageUrl(buildPublicUrl(image.getImagePath()));
         return vo;
-    }
-
-    private String buildPublicUrl(String relativePath) {
-        if (!StringUtils.hasText(relativePath)) {
-            return "";
-        }
-        return storageProperties.getPublicUrlPrefix() + "/" + relativePath.replace('\\', '/');
     }
 
     private LocalDateTime parseStartTime(String value) {

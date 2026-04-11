@@ -1,5 +1,7 @@
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
+import { ElMessage } from 'element-plus'
+import { abortInspectionSession, captureInspectionSession, finishInspectionSession, startInspectionSession } from '../api/inspectionSession'
 import { TEST_MODE_STATES, useDashboardStore } from '../stores/dashboard'
 import { rosService } from '../services/ros'
 import { appConfig } from '../config/app'
@@ -23,6 +25,16 @@ function getAxiosStatus(error) {
 
 function getAxiosMessage(error) {
   return error?.response?.data?.message || error?.message || 'unknown error'
+}
+
+function showRequestError(defaultMessage, error) {
+  const status = getAxiosStatus(error)
+  const message = getAxiosMessage(error)
+  if (status === 401 || status === 403) {
+    ElMessage.error(message || '登录态失效或接口权限被拒绝')
+    return
+  }
+  ElMessage.error(message || defaultMessage)
 }
 
 function decodeBase64ToBytes(base64Value) {
@@ -111,14 +123,44 @@ function decodePointCloud(message) {
 export function useRosDashboard() {
   const store = useDashboardStore()
   const { patrolMode, pendingPatrolMode } = storeToRefs(store)
+
   const unsubscribers = []
   const uiPatrolMode = computed(() => pendingPatrolMode.value || patrolMode.value)
+  const manualRecordingActive = ref(false)
+
   let streamWatchdogId = 0
   let hasLoggedPointCloudFrame = false
   let lastMotionReachedValue = false
   let testStartTimerId = 0
   let testProcessTimerId = 0
   let testCooldownTimerId = 0
+  let autoSessionId = ''
+  let testSessionId = ''
+  let manualSessionId = ''
+  let autoFinishing = false
+
+  function getEnvironmentCode() {
+    return store.waterDetected ? '1' : '0'
+  }
+
+  async function createSession(mode) {
+    const { data } = await startInspectionSession({
+      mode,
+      environment: getEnvironmentCode()
+    })
+    return String(data?.sessionId || '').trim()
+  }
+
+  async function abortSession(sessionId) {
+    if (!sessionId) {
+      return
+    }
+    try {
+      await abortInspectionSession(sessionId)
+    } catch (error) {
+      debugLog('abort inspection session failed', getAxiosMessage(error))
+    }
+  }
 
   function clearTestTimers() {
     window.clearTimeout(testStartTimerId)
@@ -135,7 +177,19 @@ export function useRosDashboard() {
     })
   }
 
-  function setPatrolMode(mode) {
+  async function setPatrolMode(mode) {
+    if (mode !== 'auto' && autoSessionId) {
+      await abortSession(autoSessionId)
+      autoSessionId = ''
+      store.resetAutoAssembly()
+    }
+
+    if (mode !== 'manual' && manualSessionId) {
+      await abortSession(manualSessionId)
+      manualSessionId = ''
+      manualRecordingActive.value = false
+    }
+
     store.setPendingPatrolMode(mode)
     publishManualMode(mode === 'manual')
   }
@@ -148,12 +202,94 @@ export function useRosDashboard() {
     rosService.publish(topic, { data: active })
   }
 
-  function startAutoInspection() {
-    if (!store.startAutoAssembly()) {
+  async function startAutoInspection() {
+    if (autoSessionId || !store.startAutoAssembly()) {
       return
     }
-    lastMotionReachedValue = false
-    rosService.publish(appConfig.topics.startAuto, { data: true })
+
+    try {
+      autoSessionId = await createSession('1')
+      if (!autoSessionId) {
+        throw new Error('empty session id')
+      }
+      lastMotionReachedValue = false
+      rosService.publish(appConfig.topics.startAuto, { data: true })
+    } catch (error) {
+      store.resetAutoAssembly()
+      debugLog('start auto inspection recording failed', getAxiosMessage(error))
+      showRequestError('自动巡检录像启动失败', error)
+    }
+  }
+
+  async function completeAutoInspection() {
+    if (!autoSessionId || autoFinishing) {
+      return
+    }
+
+    autoFinishing = true
+    const sessionId = autoSessionId
+    autoSessionId = ''
+
+    try {
+      await finishInspectionSession(sessionId, { copyDefectImages: false })
+      store.resetAutoAssembly()
+      await store.loadHistory({ page: 1 })
+    } catch (error) {
+      debugLog('finish auto inspection recording failed', getAxiosMessage(error))
+      showRequestError('自动巡检录像结束失败', error)
+      await abortSession(sessionId)
+      store.resetAutoAssembly()
+    } finally {
+      autoFinishing = false
+    }
+  }
+
+  async function toggleManualRecording() {
+    if (store.patrolMode !== 'manual') {
+      return
+    }
+
+    if (manualRecordingActive.value && manualSessionId) {
+      const sessionId = manualSessionId
+      manualSessionId = ''
+      manualRecordingActive.value = false
+      try {
+        await finishInspectionSession(sessionId, { copyDefectImages: false })
+        await store.loadHistory({ page: 1 })
+      } catch (error) {
+        debugLog('finish manual recording failed', getAxiosMessage(error))
+        showRequestError('人工巡检录像保存失败', error)
+        await abortSession(sessionId)
+      }
+      return
+    }
+
+    try {
+      const sessionId = await createSession('0')
+      if (!sessionId) {
+        throw new Error('empty session id')
+      }
+      manualSessionId = sessionId
+      manualRecordingActive.value = true
+    } catch (error) {
+      manualSessionId = ''
+      manualRecordingActive.value = false
+      debugLog('start manual recording failed', getAxiosMessage(error))
+      showRequestError('人工巡检录像启动失败', error)
+    }
+  }
+
+  async function captureManualSnapshot() {
+    if (!manualRecordingActive.value || !manualSessionId) {
+      return
+    }
+
+    try {
+      await captureInspectionSession(manualSessionId)
+    } catch (error) {
+      debugLog('manual capture failed', getAxiosMessage(error))
+      showRequestError('人工巡检拍照失败', error)
+    }
   }
 
   function markDetectDone() {
@@ -169,9 +305,14 @@ export function useRosDashboard() {
     rosService.publish(appConfig.topics.uiCallScriptCmd, { data: normalized })
   }
 
-  function setTestModeEnabled(enabled) {
+  async function setTestModeEnabled(enabled) {
     clearTestTimers()
+
     if (!enabled) {
+      if (testSessionId) {
+        await abortSession(testSessionId)
+        testSessionId = ''
+      }
       store.setTestModeEnabled(false)
       publishUiScriptCommand('stop_pipe_system.sh')
       return
@@ -180,9 +321,23 @@ export function useRosDashboard() {
     store.setTestModeEnabled(true)
   }
 
-  function startTestSequence() {
+  async function startTestSequence() {
     if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.WAITING_START) {
       return
+    }
+
+    if (!testSessionId) {
+      try {
+        testSessionId = await createSession('2')
+        if (!testSessionId) {
+          throw new Error('empty session id')
+        }
+      } catch (error) {
+        testSessionId = ''
+        debugLog('start test recording failed', getAxiosMessage(error))
+        showRequestError('测试模式录像启动失败', error)
+        return
+      }
     }
 
     const token = store.advancePcdLoadSequenceToken()
@@ -251,20 +406,37 @@ export function useRosDashboard() {
   }
 
   function finishTestSequence() {
-    if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.READY_FINISH) {
+    if (!store.testModeEnabled || store.testState !== TEST_MODE_STATES.READY_FINISH || !testSessionId) {
       return
     }
 
     const token = store.advancePcdLoadSequenceToken()
     const cooldownUntil = Date.now() + TEST_FINISH_COOLDOWN_MS
+    const sessionId = testSessionId
+
     store.beginTestCooldown(cooldownUntil)
     publishUiScriptCommand('end_pipe_postprocess.sh')
 
-    testCooldownTimerId = window.setTimeout(() => {
+    testCooldownTimerId = window.setTimeout(async () => {
       if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
         return
       }
-      store.finishTestCooldown()
+
+      try {
+        await finishInspectionSession(sessionId, { copyDefectImages: true })
+        await store.loadHistory({ page: 1 })
+      } catch (error) {
+        debugLog('finish test recording failed', getAxiosMessage(error))
+        showRequestError('测试模式录像保存失败', error)
+        await abortSession(sessionId)
+      } finally {
+        if (testSessionId === sessionId) {
+          testSessionId = ''
+        }
+        if (store.testModeEnabled && token === store.pcdLoadSequenceToken) {
+          store.finishTestCooldown()
+        }
+      }
     }, TEST_FINISH_COOLDOWN_MS)
   }
 
@@ -356,7 +528,10 @@ export function useRosDashboard() {
       rosService.subscribe(appConfig.topics.motionReached, (message) => {
         const value = Boolean(message.data)
         if (value && !lastMotionReachedValue) {
-          store.appendNextAutoAssemblySegment()
+          const appended = store.appendNextAutoAssemblySegment()
+          if (!appended && store.autoAssemblyActive && autoSessionId) {
+            completeAutoInspection()
+          }
         }
         lastMotionReachedValue = value
       })
@@ -393,14 +568,33 @@ export function useRosDashboard() {
   onBeforeUnmount(() => {
     window.clearInterval(streamWatchdogId)
     clearTestTimers()
+
+    if (autoSessionId) {
+      abortSession(autoSessionId)
+      autoSessionId = ''
+    }
+    if (testSessionId) {
+      abortSession(testSessionId)
+      testSessionId = ''
+    }
+    if (manualSessionId) {
+      abortSession(manualSessionId)
+      manualSessionId = ''
+    }
+
+    manualRecordingActive.value = false
+
     unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe())
   })
 
   return {
     patrolMode: uiPatrolMode,
+    manualRecordingActive,
     setPatrolMode,
     publishMoveCommand,
     startAutoInspection,
+    toggleManualRecording,
+    captureManualSnapshot,
     markDetectDone,
     publishUiScriptCommand,
     setTestModeEnabled,
