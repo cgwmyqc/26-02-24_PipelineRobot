@@ -4,13 +4,16 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
+#include <Update.h>
+#include <mbedtls/sha256.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 
 #include <std_msgs/msg/bool.h>
+#include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/int32.h>
-#include <std_msgs/msg/float32.h>
+#include <std_msgs/msg/string.h>
 
 // ============================================================
 // 错误检查宏
@@ -111,12 +114,12 @@ constexpr float COUNTS_PER_METER = ENCODER_X4_COUNTS_PER_REV / WHEEL_CIRCUMFEREN
 // 自动巡检单步前进 0.3 m
 constexpr float AUTO_STEP_LENGTH_M = 0.3f;
 constexpr int32_t AUTO_STEP_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_STEP_LENGTH_M + 0.5f);
-constexpr float AUTO_FIRST_DETECT_OFFSET_M = 0.5f;
+constexpr float AUTO_FIRST_DETECT_OFFSET_M = 1.0f;
 constexpr int32_t AUTO_FIRST_DETECT_COUNTS =
     (int32_t)(COUNTS_PER_METER * AUTO_FIRST_DETECT_OFFSET_M + 0.5f);
 
-// 自动巡检总行程 1.2 m，从首次检测点开始累计
-constexpr float AUTO_TOTAL_LENGTH_M = 1.2f;
+// 自动巡检总行程 2.1 m，从首次检测点开始累计
+constexpr float AUTO_TOTAL_LENGTH_M = 2.1f;
 constexpr int32_t AUTO_TOTAL_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_TOTAL_LENGTH_M + 0.5f);
 
 // 回零时允许的编码器误差
@@ -126,6 +129,22 @@ constexpr int32_t HOME_TOLERANCE_COUNTS = 5;
 // 消抖参数
 // ============================================================
 constexpr uint32_t DEBOUNCE_MS = 30;
+constexpr size_t OTA_URL_BUFFER_SIZE = 256;
+constexpr size_t OTA_JOB_BUFFER_SIZE = 64;
+constexpr size_t OTA_SHA256_BUFFER_SIZE = 65;
+constexpr size_t OTA_FILENAME_BUFFER_SIZE = 96;
+constexpr size_t OTA_COMMAND_BUFFER_SIZE = 512;
+constexpr size_t OTA_STATUS_BUFFER_SIZE = 256;
+constexpr size_t OTA_HTTP_BUFFER_SIZE = 1024;
+constexpr size_t OTA_PHASE_BUFFER_SIZE = 24;
+constexpr size_t OTA_MESSAGE_BUFFER_SIZE = 128;
+constexpr uint32_t OTA_CONNECT_TIMEOUT_MS = 5000;
+constexpr uint32_t OTA_HEADER_TIMEOUT_MS = 5000;
+constexpr uint32_t OTA_FIRST_BODY_TIMEOUT_MS = 5000;
+constexpr uint32_t OTA_BODY_CHUNK_TIMEOUT_MS = 5000;
+static const char *OTA_COMMAND_TOPIC = "/fixed_part/ota/command";
+static const char *OTA_STATUS_TOPIC = "/fixed_part/ota/status";
+static const char *OTA_PROGRESS_TOPIC = "/fixed_part/ota/progress";
 
 // ============================================================
 // 状态定义
@@ -163,6 +182,17 @@ typedef struct
   bool last_stable_state;      // 上一次稳定状态
   uint32_t last_change_ms;     // 原始输入最近一次变化时间
 } DebounceInput_t;
+
+typedef struct
+{
+  bool pending;
+  bool in_progress;
+  char job_id[OTA_JOB_BUFFER_SIZE];
+  char url[OTA_URL_BUFFER_SIZE];
+  char sha256[OTA_SHA256_BUFFER_SIZE];
+  char filename[OTA_FILENAME_BUFFER_SIZE];
+  size_t size;
+} OtaRequest_t;
 
 // ============================================================
 // 控制器状态快照
@@ -241,6 +271,13 @@ int32_t g_auto_total_target_count = 0;  // 自动巡检终点
 DebounceInput_t g_mode_toggle_db = {false, false, false, 0};
 DebounceInput_t g_btn_forward_db = {false, false, false, 0};
 DebounceInput_t g_btn_reverse_db = {false, false, false, 0};
+OtaRequest_t g_ota_request = {false, false, "", "", "", "", 0};
+SemaphoreHandle_t ota_state_mutex = NULL;
+volatile bool g_ota_worker_busy = false;
+char g_ota_phase[OTA_PHASE_BUFFER_SIZE] = "idle";
+char g_ota_message[OTA_MESSAGE_BUFFER_SIZE] = "OTA 服务就绪";
+char g_ota_active_job_id[OTA_JOB_BUFFER_SIZE] = "";
+int32_t g_ota_progress_value = 0;
 
 // ============================================================
 // micro-ROS 实体
@@ -261,6 +298,8 @@ rcl_publisher_t btn_reverse_pub;
 rcl_publisher_t motion_reached_pub;
 rcl_publisher_t encoder_count_pub;
 rcl_publisher_t travel_m_pub;
+rcl_publisher_t ota_status_pub;
+rcl_publisher_t ota_progress_pub;
 
 // ------------------------------------------------------------
 // 订阅器
@@ -270,6 +309,7 @@ rcl_subscription_t detect_done_sub;
 rcl_subscription_t set_manual_mode_sub;
 rcl_subscription_t manual_forward_cmd_sub;
 rcl_subscription_t manual_reverse_cmd_sub;
+rcl_subscription_t ota_command_sub;
 
 // ------------------------------------------------------------
 // 消息对象
@@ -282,6 +322,9 @@ std_msgs__msg__Bool btn_reverse_msg;
 std_msgs__msg__Bool motion_reached_msg;
 std_msgs__msg__Int32 encoder_count_msg;
 std_msgs__msg__Float32 travel_m_msg;
+std_msgs__msg__Int32 ota_progress_msg;
+std_msgs__msg__String ota_command_msg;
+std_msgs__msg__String ota_status_msg;
 
 // 订阅消息缓冲
 std_msgs__msg__Bool start_auto_msg;
@@ -289,6 +332,8 @@ std_msgs__msg__Bool detect_done_msg;
 std_msgs__msg__Bool set_manual_mode_msg;
 std_msgs__msg__Bool manual_forward_cmd_msg;
 std_msgs__msg__Bool manual_reverse_cmd_msg;
+char g_ota_command_buffer[OTA_COMMAND_BUFFER_SIZE];
+char g_ota_status_buffer[OTA_STATUS_BUFFER_SIZE];
 
 // ============================================================
 // UDP 传输
@@ -308,6 +353,7 @@ bool check_agent_alive();
 
 void io_control_task(void *parameter);
 void micro_ros_task(void *parameter);
+void ota_worker_task(void *parameter);
 
 void IRAM_ATTR encoder_isr();
 int32_t get_encoder_count();
@@ -321,9 +367,14 @@ void detect_done_callback(const void *msgin);
 void set_manual_mode_callback(const void *msgin);
 void manual_forward_cmd_callback(const void *msgin);
 void manual_reverse_cmd_callback(const void *msgin);
+void ota_command_callback(const void *msgin);
 
 bool debounce_update(DebounceInput_t *db, bool raw, uint32_t now_ms);
 bool debounce_rising_edge(DebounceInput_t *db);
+bool ota_download_and_apply();
+void ota_set_runtime_state(const char *job_id, const char *phase, const char *message, int32_t progress);
+void ota_snapshot_runtime_state(char *job_id, size_t job_id_size, char *phase, size_t phase_size, char *message, size_t message_size, int32_t *progress);
+void ota_set_worker_busy_flag(bool busy);
 
 // ============================================================
 // custom transport
@@ -398,6 +449,242 @@ size_t custom_udp_transport_read(struct uxrCustomTransport *transport,
     vTaskDelay(pdMS_TO_TICKS(1));
   }
   return 0;
+}
+
+bool json_extract_string(const char *json, const char *key, char *out, size_t out_size)
+{
+  if (json == NULL || key == NULL || out == NULL || out_size == 0)
+  {
+    return false;
+  }
+
+  char pattern[48];
+  snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+  const char *key_pos = strstr(json, pattern);
+  if (key_pos == NULL)
+  {
+    return false;
+  }
+
+  const char *colon_pos = strchr(key_pos + strlen(pattern), ':');
+  if (colon_pos == NULL)
+  {
+    return false;
+  }
+
+  const char *first_quote = strchr(colon_pos, '"');
+  if (first_quote == NULL)
+  {
+    return false;
+  }
+
+  const char *cursor = first_quote + 1;
+  size_t written = 0;
+  while (*cursor != '\0')
+  {
+    if (*cursor == '"' && *(cursor - 1) != '\\')
+    {
+      break;
+    }
+    if (written + 1 < out_size)
+    {
+      out[written++] = *cursor;
+    }
+    cursor++;
+  }
+
+  if (*cursor != '"')
+  {
+    return false;
+  }
+
+  out[written] = '\0';
+  return true;
+}
+
+bool json_extract_size(const char *json, const char *key, size_t *value)
+{
+  if (json == NULL || key == NULL || value == NULL)
+  {
+    return false;
+  }
+
+  char pattern[48];
+  snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+  const char *key_pos = strstr(json, pattern);
+  if (key_pos == NULL)
+  {
+    return false;
+  }
+
+  const char *colon_pos = strchr(key_pos + strlen(pattern), ':');
+  if (colon_pos == NULL)
+  {
+    return false;
+  }
+
+  char *end_ptr = NULL;
+  unsigned long parsed = strtoul(colon_pos + 1, &end_ptr, 10);
+  if (end_ptr == colon_pos + 1)
+  {
+    return false;
+  }
+
+  *value = (size_t)parsed;
+  return true;
+}
+
+void ota_set_string_msg(std_msgs__msg__String *msg, char *buffer, size_t buffer_size, const char *value)
+{
+  if (msg == NULL || buffer == NULL || buffer_size == 0 || value == NULL)
+  {
+    return;
+  }
+
+  if (buffer != value)
+  {
+    snprintf(buffer, buffer_size, "%s", value);
+  }
+  msg->data.data = buffer;
+  msg->data.size = strlen(buffer);
+  msg->data.capacity = buffer_size;
+}
+
+void ota_publish_progress(int32_t progress)
+{
+  if (ota_progress_pub.impl == NULL)
+  {
+    return;
+  }
+
+  ota_progress_msg.data = progress;
+  RCSOFTCHECK(rcl_publish(&ota_progress_pub, &ota_progress_msg, NULL));
+}
+
+void ota_publish_status(const char *job_id, const char *phase, const char *message, int32_t progress)
+{
+  if (ota_status_pub.impl == NULL)
+  {
+    return;
+  }
+
+  snprintf(
+      g_ota_status_buffer,
+      sizeof(g_ota_status_buffer),
+      "{\"job_id\":\"%s\",\"phase\":\"%s\",\"message\":\"%s\",\"progress\":%ld}",
+      job_id == NULL ? "" : job_id,
+      phase == NULL ? "idle" : phase,
+      message == NULL ? "" : message,
+      (long)progress);
+
+  ota_set_string_msg(&ota_status_msg, g_ota_status_buffer, sizeof(g_ota_status_buffer), g_ota_status_buffer);
+  RCSOFTCHECK(rcl_publish(&ota_status_pub, &ota_status_msg, NULL));
+}
+
+void ota_set_runtime_state(const char *job_id, const char *phase, const char *message, int32_t progress)
+{
+  if (ota_state_mutex == NULL)
+  {
+    return;
+  }
+
+  if (xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(50)) == pdTRUE)
+  {
+    snprintf(g_ota_active_job_id, sizeof(g_ota_active_job_id), "%s", job_id == NULL ? "" : job_id);
+    snprintf(g_ota_phase, sizeof(g_ota_phase), "%s", phase == NULL ? "idle" : phase);
+    snprintf(g_ota_message, sizeof(g_ota_message), "%s", message == NULL ? "" : message);
+    g_ota_progress_value = progress;
+    xSemaphoreGive(ota_state_mutex);
+  }
+}
+
+void ota_snapshot_runtime_state(
+    char *job_id,
+    size_t job_id_size,
+    char *phase,
+    size_t phase_size,
+    char *message,
+    size_t message_size,
+    int32_t *progress)
+{
+  if (job_id == NULL || phase == NULL || message == NULL || progress == NULL)
+  {
+    return;
+  }
+
+  job_id[0] = '\0';
+  phase[0] = '\0';
+  message[0] = '\0';
+  *progress = 0;
+
+  if (ota_state_mutex == NULL)
+  {
+    return;
+  }
+
+  if (xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(50)) == pdTRUE)
+  {
+    snprintf(job_id, job_id_size, "%s", g_ota_active_job_id);
+    snprintf(phase, phase_size, "%s", g_ota_phase);
+    snprintf(message, message_size, "%s", g_ota_message);
+    *progress = g_ota_progress_value;
+    xSemaphoreGive(ota_state_mutex);
+  }
+}
+
+void ota_set_worker_busy_flag(bool busy)
+{
+  if (ota_state_mutex != NULL && xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(50)) == pdTRUE)
+  {
+    g_ota_request.in_progress = busy;
+    g_ota_worker_busy = busy;
+    xSemaphoreGive(ota_state_mutex);
+  }
+}
+
+bool ota_parse_http_url(const char *url, char *host, size_t host_size, uint16_t *port, char *path, size_t path_size)
+{
+  if (url == NULL || host == NULL || path == NULL || port == NULL)
+  {
+    return false;
+  }
+
+  const char *cursor = strstr(url, "http://");
+  if (cursor != url)
+  {
+    return false;
+  }
+  cursor += 7;
+
+  const char *path_pos = strchr(cursor, '/');
+  const char *host_end = path_pos == NULL ? url + strlen(url) : path_pos;
+  const char *port_pos = NULL;
+  for (const char *it = cursor; it < host_end; ++it)
+  {
+    if (*it == ':')
+    {
+      port_pos = it;
+      break;
+    }
+  }
+
+  size_t host_len = (size_t)((port_pos != NULL ? port_pos : host_end) - cursor);
+  if (host_len == 0 || host_len + 1 > host_size)
+  {
+    return false;
+  }
+
+  memcpy(host, cursor, host_len);
+  host[host_len] = '\0';
+
+  *port = 80;
+  if (port_pos != NULL)
+  {
+    *port = (uint16_t)atoi(port_pos + 1);
+  }
+
+  snprintf(path, path_size, "%s", path_pos == NULL ? "/" : path_pos);
+  return true;
 }
 
 // ============================================================
@@ -490,6 +777,7 @@ void start_auto_callback(const void *msgin)
   const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
   if (msg->data)
   {
+    Serial.println("[ROS][callback] start_auto hit");
     g_start_auto_cmd = true;
     Serial.println("[ROS] recv start_auto = true");
   }
@@ -500,6 +788,7 @@ void detect_done_callback(const void *msgin)
   const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
   if (msg->data)
   {
+    Serial.println("[ROS][callback] detect_done hit");
     g_detect_done_cmd = true;
     Serial.println("[ROS] recv detect_done = true");
   }
@@ -508,6 +797,7 @@ void detect_done_callback(const void *msgin)
 void set_manual_mode_callback(const void *msgin)
 {
   const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  Serial.println("[ROS][callback] set_manual_mode hit");
   g_remote_manual_mode_value = msg->data;
   g_remote_manual_mode_pending = true;
   Serial.print("[ROS] recv set_manual_mode = ");
@@ -517,13 +807,347 @@ void set_manual_mode_callback(const void *msgin)
 void manual_forward_cmd_callback(const void *msgin)
 {
   const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  Serial.println("[ROS][callback] manual_forward hit");
   g_auto_forward_cmd = msg->data;
 }
 
 void manual_reverse_cmd_callback(const void *msgin)
 {
   const std_msgs__msg__Bool *msg = (const std_msgs__msg__Bool *)msgin;
+  Serial.println("[ROS][callback] manual_reverse hit");
   g_auto_reverse_cmd = msg->data;
+}
+
+void ota_command_callback(const void *msgin)
+{
+  const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;
+  if (msg == NULL || msg->data.data == NULL || msg->data.size == 0)
+  {
+    return;
+  }
+
+  char payload[OTA_COMMAND_BUFFER_SIZE];
+  size_t copy_len = msg->data.size;
+  if (copy_len >= sizeof(payload))
+  {
+    copy_len = sizeof(payload) - 1;
+  }
+  memcpy(payload, msg->data.data, copy_len);
+  payload[copy_len] = '\0';
+
+  Serial.println("[ROS][callback] ota_command hit");
+
+  bool ota_busy = false;
+  if (ota_state_mutex != NULL && xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE)
+  {
+    ota_busy = g_ota_worker_busy || g_ota_request.pending || g_ota_request.in_progress;
+    xSemaphoreGive(ota_state_mutex);
+  }
+
+  if (ota_busy)
+  {
+    char rejected_job_id[OTA_JOB_BUFFER_SIZE] = "";
+    json_extract_string(payload, "job_id", rejected_job_id, sizeof(rejected_job_id));
+    ota_publish_status(rejected_job_id, "error", "设备正在刷写中，请稍后再试", ota_progress_msg.data);
+    return;
+  }
+
+  OtaRequest_t request = {false, false, "", "", "", "", 0};
+  if (!json_extract_string(payload, "job_id", request.job_id, sizeof(request.job_id)) ||
+      !json_extract_string(payload, "url", request.url, sizeof(request.url)) ||
+      !json_extract_string(payload, "sha256", request.sha256, sizeof(request.sha256)) ||
+      !json_extract_string(payload, "filename", request.filename, sizeof(request.filename)) ||
+      !json_extract_size(payload, "size", &request.size))
+  {
+    ota_publish_status("", "error", "OTA 命令字段缺失", 0);
+    return;
+  }
+
+  bool queued_ok = false;
+  if (ota_state_mutex != NULL && xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(50)) == pdTRUE)
+  {
+    g_ota_request = request;
+    g_ota_request.pending = true;
+    g_ota_request.in_progress = false;
+    queued_ok = true;
+    xSemaphoreGive(ota_state_mutex);
+  }
+
+  if (!queued_ok)
+  {
+    ota_publish_status(request.job_id, "error", "OTA 队列繁忙，请稍后重试", 0);
+    return;
+  }
+
+  ota_set_runtime_state(request.job_id, "queued", "OTA 命令已接收，等待开始刷写", 0);
+  ota_publish_status(request.job_id, "queued", "OTA 命令已接收，等待开始刷写", 0);
+}
+
+bool ota_download_and_apply()
+{
+  if (ota_state_mutex == NULL)
+  {
+    return false;
+  }
+
+  OtaRequest_t request = {false, false, "", "", "", "", 0};
+  if (xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(50)) != pdTRUE)
+  {
+    return false;
+  }
+
+  if (!g_ota_request.pending)
+  {
+    xSemaphoreGive(ota_state_mutex);
+    return false;
+  }
+
+  request = g_ota_request;
+  g_ota_request.pending = false;
+  g_ota_request.in_progress = true;
+  g_ota_worker_busy = true;
+  xSemaphoreGive(ota_state_mutex);
+
+  Serial.print("[OTA][worker] start job=");
+  Serial.println(request.job_id);
+
+  char host[64];
+  char path[192];
+  uint16_t port = 80;
+  ota_set_runtime_state(request.job_id, "connecting", "正在连接固件服务器", 0);
+
+  if (!ota_parse_http_url(request.url, host, sizeof(host), &port, path, sizeof(path)))
+  {
+    ota_set_runtime_state(request.job_id, "error", "OTA URL 无效", 0);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  EthernetClient client;
+  Serial.print("[OTA][http] connect ");
+  Serial.print(host);
+  Serial.print(":");
+  Serial.println(port);
+
+  if (!client.connect(host, port))
+  {
+    ota_set_runtime_state(request.job_id, "error", "连接固件服务器超时", 0);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  Serial.println("[OTA][http] connect ok");
+
+  client.print("GET ");
+  client.print(path);
+  client.print(" HTTP/1.1\r\nHost: ");
+  client.print(host);
+  client.print("\r\nConnection: close\r\n\r\n");
+
+  uint32_t header_deadline = millis();
+  while (!client.available() && client.connected())
+  {
+    if (millis() - header_deadline > OTA_HEADER_TIMEOUT_MS)
+    {
+      client.stop();
+      ota_set_runtime_state(request.job_id, "error", "固件响应头超时", 0);
+      ota_set_worker_busy_flag(false);
+      return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+
+  String status_line = client.readStringUntil('\n');
+  status_line.trim();
+  Serial.print("[OTA][http] status line=");
+  Serial.println(status_line);
+  if (status_line.indexOf("200") < 0)
+  {
+    client.stop();
+    ota_set_runtime_state(request.job_id, "error", "固件下载 HTTP 状态异常", 0);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  size_t content_length = 0;
+  header_deadline = millis();
+  while (client.connected())
+  {
+    if (!client.available())
+    {
+      if (millis() - header_deadline > OTA_HEADER_TIMEOUT_MS)
+      {
+        client.stop();
+        ota_set_runtime_state(request.job_id, "error", "固件响应头超时", 0);
+        ota_set_worker_busy_flag(false);
+        return false;
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
+    String header_line = client.readStringUntil('\n');
+    header_line.trim();
+    if (header_line.length() == 0)
+    {
+      break;
+    }
+    if (header_line.startsWith("Content-Length:"))
+    {
+      content_length = (size_t)header_line.substring(15).toInt();
+    }
+  }
+
+  Serial.print("[OTA][http] content_length=");
+  Serial.println((unsigned long)content_length);
+
+  if (request.size > 0 && content_length > 0 && request.size != content_length)
+  {
+    client.stop();
+    ota_set_runtime_state(request.job_id, "error", "固件大小与声明不一致", 0);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  size_t update_size = request.size > 0 ? request.size : content_length;
+  if (!Update.begin(update_size == 0 ? UPDATE_SIZE_UNKNOWN : update_size))
+  {
+    client.stop();
+    ota_set_runtime_state(request.job_id, "error", "OTA 分区初始化失败", 0);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  ota_set_runtime_state(request.job_id, "downloading", "已连接服务器，等待固件数据", 0);
+
+  mbedtls_sha256_context sha_ctx;
+  mbedtls_sha256_init(&sha_ctx);
+  mbedtls_sha256_starts(&sha_ctx, 0);
+
+  uint8_t buffer[OTA_HTTP_BUFFER_SIZE];
+  size_t total_written = 0;
+  int32_t last_progress = -1;
+  bool first_chunk_received = false;
+  uint32_t download_deadline = millis();
+
+  while (client.connected() || client.available())
+  {
+    int available = client.available();
+    if (available <= 0)
+    {
+      uint32_t timeout_limit = first_chunk_received ? OTA_BODY_CHUNK_TIMEOUT_MS : OTA_FIRST_BODY_TIMEOUT_MS;
+      if (millis() - download_deadline > timeout_limit)
+      {
+        Update.abort();
+        client.stop();
+        ota_set_runtime_state(
+            request.job_id,
+            "error",
+            first_chunk_received ? "固件数据流超时" : "固件数据首包超时",
+            last_progress < 0 ? 0 : last_progress);
+        ota_set_worker_busy_flag(false);
+        return false;
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
+    download_deadline = millis();
+    if (!first_chunk_received)
+    {
+      first_chunk_received = true;
+      Serial.println("[OTA][http] first body chunk received");
+      ota_set_runtime_state(request.job_id, "writing", "已收到固件数据，开始写入", 0);
+    }
+
+    size_t to_read = (size_t)available;
+    if (to_read > sizeof(buffer))
+    {
+      to_read = sizeof(buffer);
+    }
+
+    int read_len = client.read(buffer, to_read);
+    if (read_len <= 0)
+    {
+      continue;
+    }
+
+    mbedtls_sha256_update(&sha_ctx, buffer, (size_t)read_len);
+    size_t written = Update.write(buffer, (size_t)read_len);
+    if (written != (size_t)read_len)
+    {
+      mbedtls_sha256_free(&sha_ctx);
+      Update.abort();
+      client.stop();
+      ota_set_runtime_state(request.job_id, "error", "固件写入失败", last_progress < 0 ? 0 : last_progress);
+      ota_set_worker_busy_flag(false);
+      return false;
+    }
+
+    total_written += written;
+    size_t expected_total = request.size > 0 ? request.size : content_length;
+    int32_t progress = expected_total > 0 ? (int32_t)((total_written * 100UL) / expected_total) : 0;
+    if (progress == 0 && total_written > 0)
+    {
+      progress = 1;
+    }
+    if (progress > 100)
+    {
+      progress = 100;
+    }
+
+    if (progress != last_progress)
+    {
+      last_progress = progress;
+      ota_set_runtime_state(request.job_id, "writing", "正在写入固件", progress);
+    }
+  }
+
+  client.stop();
+
+  if (request.size > 0 && total_written != request.size)
+  {
+    mbedtls_sha256_free(&sha_ctx);
+    Update.abort();
+    ota_set_runtime_state(request.job_id, "error", "固件下载不完整", last_progress < 0 ? 0 : last_progress);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  ota_set_runtime_state(request.job_id, "validating", "正在校验固件", 100);
+  Serial.println("[OTA][worker] validating image");
+
+  uint8_t digest[32];
+  mbedtls_sha256_finish(&sha_ctx, digest);
+  mbedtls_sha256_free(&sha_ctx);
+
+  char digest_hex[65];
+  for (size_t i = 0; i < sizeof(digest); ++i)
+  {
+    snprintf(digest_hex + i * 2, sizeof(digest_hex) - i * 2, "%02x", digest[i]);
+  }
+
+  if (strcasecmp(digest_hex, request.sha256) != 0)
+  {
+    Update.abort();
+    ota_set_runtime_state(request.job_id, "error", "固件 SHA256 校验失败", 100);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  if (!Update.end(true))
+  {
+    ota_set_runtime_state(request.job_id, "error", "OTA 刷写结束失败", 100);
+    ota_set_worker_busy_flag(false);
+    return false;
+  }
+
+  ota_set_runtime_state(request.job_id, "success", "固件刷写成功，设备即将重启", 100);
+  Serial.println("[OTA][worker] success, rebooting");
+  ota_set_worker_busy_flag(false);
+  delay(1200);
+  ESP.restart();
+  return true;
 }
 
 // ============================================================
@@ -779,12 +1403,22 @@ bool create_microros_entities()
   motion_reached_pub = rcl_get_zero_initialized_publisher();
   encoder_count_pub = rcl_get_zero_initialized_publisher();
   travel_m_pub = rcl_get_zero_initialized_publisher();
+  ota_status_pub = rcl_get_zero_initialized_publisher();
+  ota_progress_pub = rcl_get_zero_initialized_publisher();
 
   start_auto_sub = rcl_get_zero_initialized_subscription();
   detect_done_sub = rcl_get_zero_initialized_subscription();
   set_manual_mode_sub = rcl_get_zero_initialized_subscription();
   manual_forward_cmd_sub = rcl_get_zero_initialized_subscription();
   manual_reverse_cmd_sub = rcl_get_zero_initialized_subscription();
+  ota_command_sub = rcl_get_zero_initialized_subscription();
+
+  ota_command_msg.data.data = g_ota_command_buffer;
+  ota_command_msg.data.size = 0;
+  ota_command_msg.data.capacity = sizeof(g_ota_command_buffer);
+  ota_status_msg.data.data = g_ota_status_buffer;
+  ota_status_msg.data.size = 0;
+  ota_status_msg.data.capacity = sizeof(g_ota_status_buffer);
 
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
   RCCHECK(rclc_node_init_default(&node, "esp32_fixed_controller_node", "", &support));
@@ -840,6 +1474,18 @@ bool create_microros_entities()
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
       "/fixed_controller/travel_m"));
 
+  RCCHECK(rclc_publisher_init_default(
+      &ota_status_pub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+      OTA_STATUS_TOPIC));
+
+  RCCHECK(rclc_publisher_init_default(
+      &ota_progress_pub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+      OTA_PROGRESS_TOPIC));
+
   // ----------------------------------------------------------
   // 订阅器
   // ----------------------------------------------------------
@@ -873,10 +1519,16 @@ bool create_microros_entities()
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_reverse_cmd"));
 
+  RCCHECK(rclc_subscription_init_default(
+      &ota_command_sub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+      OTA_COMMAND_TOPIC));
+
   // ----------------------------------------------------------
   // executor
   // ----------------------------------------------------------
-  RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
+  RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
 
   RCCHECK(rclc_executor_add_subscription(
       &executor,
@@ -913,6 +1565,27 @@ bool create_microros_entities()
       &manual_reverse_cmd_callback,
       ON_NEW_DATA));
 
+  RCCHECK(rclc_executor_add_subscription(
+      &executor,
+      &ota_command_sub,
+      &ota_command_msg,
+      &ota_command_callback,
+      ON_NEW_DATA));
+
+  char ota_job_id[OTA_JOB_BUFFER_SIZE];
+  char ota_phase[OTA_PHASE_BUFFER_SIZE];
+  char ota_message[OTA_MESSAGE_BUFFER_SIZE];
+  int32_t ota_progress = 0;
+  ota_snapshot_runtime_state(
+      ota_job_id,
+      sizeof(ota_job_id),
+      ota_phase,
+      sizeof(ota_phase),
+      ota_message,
+      sizeof(ota_message),
+      &ota_progress);
+  ota_publish_progress(ota_progress);
+  ota_publish_status(ota_job_id, ota_phase, ota_message, ota_progress);
   Serial.println("[micro-ROS] create node/pubs/subs ok");
   return true;
 }
@@ -940,6 +1613,18 @@ void destroy_microros_entities()
   {
     RCSOFTCHECK(rcl_publisher_fini(&travel_m_pub, &node));
     travel_m_pub = rcl_get_zero_initialized_publisher();
+  }
+
+  if (ota_status_pub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_publisher_fini(&ota_status_pub, &node));
+    ota_status_pub = rcl_get_zero_initialized_publisher();
+  }
+
+  if (ota_progress_pub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_publisher_fini(&ota_progress_pub, &node));
+    ota_progress_pub = rcl_get_zero_initialized_publisher();
   }
 
   if (motor_enable_pub.impl != NULL)
@@ -1000,6 +1685,12 @@ void destroy_microros_entities()
   {
     RCSOFTCHECK(rcl_subscription_fini(&manual_reverse_cmd_sub, &node));
     manual_reverse_cmd_sub = rcl_get_zero_initialized_subscription();
+  }
+
+  if (ota_command_sub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_subscription_fini(&ota_command_sub, &node));
+    ota_command_sub = rcl_get_zero_initialized_subscription();
   }
 
   RCSOFTCHECK(rclc_executor_fini(&executor));
@@ -1213,6 +1904,29 @@ void io_control_task(void *parameter)
   }
 }
 
+void ota_worker_task(void *parameter)
+{
+  (void)parameter;
+
+  for (;;)
+  {
+    bool should_start = false;
+    if (ota_state_mutex != NULL && xSemaphoreTake(ota_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE)
+    {
+      should_start = g_ota_request.pending && !g_ota_worker_busy;
+      xSemaphoreGive(ota_state_mutex);
+    }
+
+    if (should_start)
+    {
+      ota_download_and_apply();
+      Serial.println("[OTA][worker] finish cycle");
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
 // micro-ROS 任务
 // 负责与 agent 建立连接、轮询订阅回调、周期发布控制器状态。
 // ============================================================
@@ -1223,9 +1937,11 @@ void micro_ros_task(void *parameter)
   ControllerState_t local_state;
   uint32_t last_ping_check_ms = 0;
   uint32_t last_publish_ms = 0;
+  uint32_t last_alive_log_ms = 0;
 
   const uint32_t alive_check_period_ms = 2000;
   const uint32_t publish_period_ms = 200;
+  const uint32_t alive_log_period_ms = 5000;
 
   for (;;)
   {
@@ -1278,6 +1994,12 @@ void micro_ros_task(void *parameter)
         // ----------------------------------------------------
         RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
 
+        if (now - last_alive_log_ms >= alive_log_period_ms)
+        {
+          last_alive_log_ms = now;
+          Serial.println("[micro-ROS] task alive");
+        }
+
         // ----------------------------------------------------
         // 2) 定期检查 agent 是否在线
         // ----------------------------------------------------
@@ -1300,6 +2022,19 @@ void micro_ros_task(void *parameter)
         if (now - last_publish_ms >= publish_period_ms)
         {
           last_publish_ms = now;
+
+          char ota_job_id[OTA_JOB_BUFFER_SIZE];
+          char ota_phase[OTA_PHASE_BUFFER_SIZE];
+          char ota_message[OTA_MESSAGE_BUFFER_SIZE];
+          int32_t ota_progress = 0;
+          ota_snapshot_runtime_state(
+              ota_job_id,
+              sizeof(ota_job_id),
+              ota_phase,
+              sizeof(ota_phase),
+              ota_message,
+              sizeof(ota_message),
+              &ota_progress);
 
           bool has_data = false;
           if (xSemaphoreTake(ctrl_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE)
@@ -1331,6 +2066,8 @@ void micro_ros_task(void *parameter)
             rcl_ret_t ret6 = rcl_publish(&motion_reached_pub, &motion_reached_msg, NULL);
             rcl_ret_t ret7 = rcl_publish(&encoder_count_pub, &encoder_count_msg, NULL);
             rcl_ret_t ret8 = rcl_publish(&travel_m_pub, &travel_m_msg, NULL);
+            ota_publish_progress(ota_progress);
+            ota_publish_status(ota_job_id, ota_phase, ota_message, ota_progress);
 
             if (ret1 == RCL_RET_OK &&
                 ret2 == RCL_RET_OK &&
@@ -1405,6 +2142,17 @@ void setup()
     }
   }
 
+  ota_state_mutex = xSemaphoreCreateMutex();
+  if (ota_state_mutex == NULL)
+  {
+    Serial.println("[system] create ota mutex failed");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+  ota_set_runtime_state("", "idle", "OTA 服务就绪", 0);
+
   if (!init_io())
   {
     Serial.println("[system] IO init failed");
@@ -1432,7 +2180,8 @@ void setup()
   }
 
   xTaskCreate(io_control_task, "io_control_task", 4096, NULL, 3, NULL);
-  xTaskCreate(micro_ros_task, "micro_ros_task", 12288, NULL, 5, NULL);
+  xTaskCreate(micro_ros_task, "micro_ros_task", 16384, NULL, 5, NULL);
+  xTaskCreate(ota_worker_task, "ota_worker_task", 12288, NULL, 4, NULL);
 
   Serial.println("[system] tasks created");
 }
@@ -1443,4 +2192,3 @@ void setup()
 void loop()
 {
 }
-

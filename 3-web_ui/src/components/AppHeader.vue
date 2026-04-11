@@ -6,6 +6,9 @@
         <div class="status-dot" :class="{ online: connected }"></div>
         <span>{{ connected ? 'ROS2 已连接' : 'ROS2 未连接' }}</span>
       </div>
+      <el-button class="ota-trigger-button" type="primary" @click="$emit('open-ota')">
+        固件刷写
+      </el-button>
       <div class="user-chip">
         <div class="avatar">{{ userInitial }}</div>
         <span>{{ userName }}</span>
@@ -30,7 +33,7 @@ const props = defineProps({
   }
 })
 
-defineEmits(['logout'])
+defineEmits(['logout', 'open-ota'])
 
 const userInitial = computed(() => props.userName?.slice(0, 1)?.toUpperCase() || 'U')
 const headerImage = resolveImageAsset('header')
@@ -110,6 +113,17 @@ const headerStyle = computed(() => (
   color: #0b1220;
   font-size: 13px;
   font-weight: 700;
+}
+
+.ota-trigger-button {
+  --el-button-bg-color: rgba(17, 59, 78, 0.92);
+  --el-button-border-color: rgba(103, 212, 255, 0.28);
+  --el-button-hover-bg-color: rgba(28, 84, 111, 0.96);
+  --el-button-hover-border-color: rgba(117, 240, 194, 0.42);
+  --el-button-text-color: var(--text);
+  min-height: 34px;
+  padding: 0 14px;
+  box-shadow: inset 0 0 0 1px rgba(117, 240, 194, 0.05);
 }
 
 @media (max-width: 1024px) {

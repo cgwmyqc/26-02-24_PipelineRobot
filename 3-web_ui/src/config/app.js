@@ -67,6 +67,30 @@ export const appConfig = {
       name: '/ui_call_script_cmd',
       messageType: 'std_msgs/msg/String'
     },
+    mobileOtaCommand: {
+      name: import.meta.env.VITE_MOBILE_OTA_COMMAND_TOPIC || '/mobile_part/ota/command',
+      messageType: 'std_msgs/msg/String'
+    },
+    mobileOtaStatus: {
+      name: import.meta.env.VITE_MOBILE_OTA_STATUS_TOPIC || '/mobile_part/ota/status',
+      messageType: 'std_msgs/msg/String'
+    },
+    mobileOtaProgress: {
+      name: import.meta.env.VITE_MOBILE_OTA_PROGRESS_TOPIC || '/mobile_part/ota/progress',
+      messageType: 'std_msgs/msg/Int32'
+    },
+    fixedOtaCommand: {
+      name: import.meta.env.VITE_FIXED_OTA_COMMAND_TOPIC || '/fixed_part/ota/command',
+      messageType: 'std_msgs/msg/String'
+    },
+    fixedOtaStatus: {
+      name: import.meta.env.VITE_FIXED_OTA_STATUS_TOPIC || '/fixed_part/ota/status',
+      messageType: 'std_msgs/msg/String'
+    },
+    fixedOtaProgress: {
+      name: import.meta.env.VITE_FIXED_OTA_PROGRESS_TOPIC || '/fixed_part/ota/progress',
+      messageType: 'std_msgs/msg/Int32'
+    },
     pointCloud: {
       name: '/web_ui/point_cloud',
       messageType: 'sensor_msgs/msg/PointCloud2'

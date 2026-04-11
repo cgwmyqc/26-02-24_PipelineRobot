@@ -4,6 +4,7 @@
       :connected="rosConnected"
       :user-name="authStore.user?.displayName || authStore.user?.username || 'admin'"
       @logout="handleLogout"
+      @open-ota="openDialog"
     />
 
     <main class="dashboard-shell">
@@ -93,6 +94,14 @@
       :record="detailRecord"
       @close="closeDetail"
     />
+
+    <FirmwareOtaDialog
+      :visible="dialogVisible"
+      :targets="targetCards"
+      @request-close="handleOtaDialogRequestClose"
+      @select-file="selectFile"
+      @start="startUpload"
+    />
   </div>
 </template>
 
@@ -103,10 +112,12 @@ import { useRouter } from 'vue-router'
 import AnalysisPanel from '../components/AnalysisPanel.vue'
 import AppHeader from '../components/AppHeader.vue'
 import ControlPanel from '../components/ControlPanel.vue'
+import FirmwareOtaDialog from '../components/FirmwareOtaDialog.vue'
 import HistoryQueryPanel from '../components/HistoryQueryPanel.vue'
 import InspectionDetailDialog from '../components/InspectionDetailDialog.vue'
 import PointCloudScene from '../components/PointCloudScene.vue'
 import VideoPanel from '../components/VideoPanel.vue'
+import { useFirmwareOta } from '../composables/useFirmwareOta'
 import { useRosDashboard } from '../composables/useRosDashboard'
 import { useAuthStore } from '../stores/auth'
 import { useDashboardStore } from '../stores/dashboard'
@@ -155,6 +166,14 @@ const {
   triggerTestCapture,
   finishTestSequence
 } = useRosDashboard()
+const {
+  dialogVisible,
+  targetCards,
+  openDialog,
+  requestCloseDialog,
+  selectFile,
+  startUpload
+} = useFirmwareOta()
 
 const uiPatrolMode = computed(() => rosPatrolMode.value || storePatrolMode.value)
 const pointCloudSceneMode = computed(() => (fitViewEnabled.value ? 'fitted' : 'raw'))
@@ -168,6 +187,13 @@ function handleLogout() {
 
 function handleFitViewToggle(event) {
   store.setFitViewEnabled(Boolean(event?.target?.checked))
+}
+
+async function handleOtaDialogRequestClose(done) {
+  const closed = await requestCloseDialog()
+  if (closed) {
+    done()
+  }
 }
 </script>
 
