@@ -131,3 +131,6 @@ docker-data/
 target/
 build/
 out/
+
+4-web_srv/storage/.sessions/
+4-web_srv/storage/**/*.log
