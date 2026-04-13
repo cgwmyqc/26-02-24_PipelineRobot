@@ -4,7 +4,7 @@
     <div class="header-actions">
       <div class="connection-chip">
         <div class="status-dot" :class="{ online: connected }"></div>
-        <span>{{ connected ? 'ROS2 已连接' : 'ROS2 未连接' }}</span>
+        <span>{{ connected ? '设备 已连接' : '设备 未连接' }}</span>
       </div>
       <el-button class="ota-trigger-button" type="primary" @click="$emit('open-ota')">
         固件刷写

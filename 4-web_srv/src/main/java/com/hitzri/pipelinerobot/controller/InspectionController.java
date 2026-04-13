@@ -80,7 +80,14 @@ public class InspectionController {
         @RequestBody(required = false) FinishInspectionSessionRequest request
     ) throws IOException, InterruptedException {
         boolean copyDefectImages = request != null && request.isCopyDefectImages();
-        Long inspectionId = inspectionSessionService.finishSession(sessionId, copyDefectImages);
+        String pointCloudFileName = request != null ? request.getPointCloudFileName() : null;
+        String pointCloudPcdContent = request != null ? request.getPointCloudPcdContent() : null;
+        Long inspectionId = inspectionSessionService.finishSession(
+            sessionId,
+            copyDefectImages,
+            pointCloudFileName,
+            pointCloudPcdContent
+        );
         return new InspectionSessionFinishVO(inspectionId);
     }
 

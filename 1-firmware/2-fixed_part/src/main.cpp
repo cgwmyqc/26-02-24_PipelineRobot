@@ -114,7 +114,7 @@ constexpr float COUNTS_PER_METER = ENCODER_X4_COUNTS_PER_REV / WHEEL_CIRCUMFEREN
 // 自动巡检单步前进 0.3 m
 constexpr float AUTO_STEP_LENGTH_M = 0.3f;
 constexpr int32_t AUTO_STEP_COUNTS = (int32_t)(COUNTS_PER_METER * AUTO_STEP_LENGTH_M + 0.5f);
-constexpr float AUTO_FIRST_DETECT_OFFSET_M = 1.0f;
+constexpr float AUTO_FIRST_DETECT_OFFSET_M = 0.9f;
 constexpr int32_t AUTO_FIRST_DETECT_COUNTS =
     (int32_t)(COUNTS_PER_METER * AUTO_FIRST_DETECT_OFFSET_M + 0.5f);
 
@@ -255,6 +255,7 @@ portMUX_TYPE g_encoder_mux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool g_start_auto_cmd = false;        // 收到开始自动巡检命令
 volatile bool g_detect_done_cmd = false;       // 收到当前检测点完成命令
 volatile bool g_motion_reached_event = false;  // 当前目标点到达事件，发布一次后清零
+volatile bool g_auto_return_home_done_event = false;  // 自动巡检回零完成状态，下一次自动开始前保持为 true
 
 AutoState_t g_auto_state = AUTO_IDLE;
 bool g_auto_task_active = false;
@@ -296,6 +297,7 @@ rcl_publisher_t motor_state_pub;
 rcl_publisher_t btn_forward_pub;
 rcl_publisher_t btn_reverse_pub;
 rcl_publisher_t motion_reached_pub;
+rcl_publisher_t auto_return_home_done_pub;
 rcl_publisher_t encoder_count_pub;
 rcl_publisher_t travel_m_pub;
 rcl_publisher_t ota_status_pub;
@@ -320,6 +322,7 @@ std_msgs__msg__Int8 motor_state_msg;
 std_msgs__msg__Bool btn_forward_msg;
 std_msgs__msg__Bool btn_reverse_msg;
 std_msgs__msg__Bool motion_reached_msg;
+std_msgs__msg__Bool auto_return_home_done_msg;
 std_msgs__msg__Int32 encoder_count_msg;
 std_msgs__msg__Float32 travel_m_msg;
 std_msgs__msg__Int32 ota_progress_msg;
@@ -1171,8 +1174,10 @@ void start_auto_sequence()
 
   g_detect_done_cmd = false;
   g_motion_reached_event = false;
+  g_auto_return_home_done_event = false;
 
   Serial.println("[AUTO] start sequence");
+  Serial.println("[AUTO] reset auto_return_home_done = false");
   Serial.print("[AUTO] home_count = ");
   Serial.println(g_auto_home_count);
   Serial.print("[AUTO] detect origin = ");
@@ -1274,7 +1279,10 @@ void process_auto_sequence(bool *motor_enable, MotorRunState_t *motor_run, int32
         g_auto_task_active = false;
         g_auto_waiting_first_detect = false;
         g_auto_state = AUTO_FINISHED;
+        g_auto_return_home_done_event = true;
 
+        Serial.println("[AUTO] returned home, skip motion_reached");
+        Serial.println("[AUTO] returned home, publish auto_return_home_done = true");
         Serial.println("[AUTO] returned home, finished");
       }
       break;
@@ -1401,6 +1409,7 @@ bool create_microros_entities()
   btn_forward_pub  = rcl_get_zero_initialized_publisher();
   btn_reverse_pub  = rcl_get_zero_initialized_publisher();
   motion_reached_pub = rcl_get_zero_initialized_publisher();
+  auto_return_home_done_pub = rcl_get_zero_initialized_publisher();
   encoder_count_pub = rcl_get_zero_initialized_publisher();
   travel_m_pub = rcl_get_zero_initialized_publisher();
   ota_status_pub = rcl_get_zero_initialized_publisher();
@@ -1461,6 +1470,12 @@ bool create_microros_entities()
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/motion_reached"));
+
+  RCCHECK(rclc_publisher_init_default(
+      &auto_return_home_done_pub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+      "/fixed_controller/auto_return_home_done"));
 
   RCCHECK(rclc_publisher_init_default(
       &encoder_count_pub,
@@ -1601,6 +1616,12 @@ void destroy_microros_entities()
   {
     RCSOFTCHECK(rcl_publisher_fini(&motion_reached_pub, &node));
     motion_reached_pub = rcl_get_zero_initialized_publisher();
+  }
+
+  if (auto_return_home_done_pub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_publisher_fini(&auto_return_home_done_pub, &node));
+    auto_return_home_done_pub = rcl_get_zero_initialized_publisher();
   }
 
   if (encoder_count_pub.impl != NULL)
@@ -2057,6 +2078,7 @@ void micro_ros_task(void *parameter)
             // motion_reached 只发布一次，到达后下一次发送立即清零
             motion_reached_msg.data = g_motion_reached_event;
             g_motion_reached_event = false;
+            auto_return_home_done_msg.data = g_auto_return_home_done_event;
 
             rcl_ret_t ret1 = rcl_publish(&motor_enable_pub, &motor_enable_msg, NULL);
             rcl_ret_t ret2 = rcl_publish(&control_mode_pub, &control_mode_msg, NULL);
@@ -2064,8 +2086,9 @@ void micro_ros_task(void *parameter)
             rcl_ret_t ret4 = rcl_publish(&btn_forward_pub, &btn_forward_msg, NULL);
             rcl_ret_t ret5 = rcl_publish(&btn_reverse_pub, &btn_reverse_msg, NULL);
             rcl_ret_t ret6 = rcl_publish(&motion_reached_pub, &motion_reached_msg, NULL);
-            rcl_ret_t ret7 = rcl_publish(&encoder_count_pub, &encoder_count_msg, NULL);
-            rcl_ret_t ret8 = rcl_publish(&travel_m_pub, &travel_m_msg, NULL);
+            rcl_ret_t ret7 = rcl_publish(&auto_return_home_done_pub, &auto_return_home_done_msg, NULL);
+            rcl_ret_t ret8 = rcl_publish(&encoder_count_pub, &encoder_count_msg, NULL);
+            rcl_ret_t ret9 = rcl_publish(&travel_m_pub, &travel_m_msg, NULL);
             ota_publish_progress(ota_progress);
             ota_publish_status(ota_job_id, ota_phase, ota_message, ota_progress);
 
@@ -2076,7 +2099,8 @@ void micro_ros_task(void *parameter)
                 ret5 == RCL_RET_OK &&
                 ret6 == RCL_RET_OK &&
                 ret7 == RCL_RET_OK &&
-                ret8 == RCL_RET_OK)
+                ret8 == RCL_RET_OK &&
+                ret9 == RCL_RET_OK)
             {
               Serial.print("[publish] mode=");
               Serial.print(local_state.manual_mode ? "MANUAL" : "AUTO");
@@ -2091,7 +2115,9 @@ void micro_ros_task(void *parameter)
               Serial.print(" auto_state=");
               Serial.print((int)local_state.auto_state);
               Serial.print(" reached=");
-              Serial.println(motion_reached_msg.data ? "1" : "0");
+              Serial.print(motion_reached_msg.data ? "1" : "0");
+              Serial.print(" auto_done=");
+              Serial.println(auto_return_home_done_msg.data ? "1" : "0");
             }
             else
             {

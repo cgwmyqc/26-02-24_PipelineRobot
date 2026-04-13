@@ -15,7 +15,13 @@ const ENVIRONMENT_MAP = {
   1: '满水'
 }
 
-const RESULT_MAP = {
+const HISTORY_RESULT_MAP = {
+  0: '无异常',
+  1: '异常',
+  2: '异常'
+}
+
+const DETAIL_RESULT_MAP = {
   0: '无异常',
   1: '裂缝预警',
   2: '淤泥预警'
@@ -46,7 +52,9 @@ export const TEST_MODE_STATES = Object.freeze({
   COOLDOWN: 'cooldown'
 })
 
-const AUTO_SEGMENT_CENTERS = Object.freeze([-0.6, -0.3, 0.0, 0.3, 0.6])
+const AUTO_TOTAL_LENGTH_M = 2.1
+const AUTO_FIRST_DETECT_OFFSET_M = 0.9
+const AUTO_STEP_LENGTH_M = 0.3
 const TEST_CAPTURE_MAX_COUNT = 14
 const TEST_CAPTURE_FIRST_Z = -2.0
 const TEST_CAPTURE_Z_STEP = 0.3
@@ -88,7 +96,7 @@ function normalizeHistoryRecord(record) {
     mode: mapCode(record?.mode, MODE_MAP),
     environment: mapCode(record?.environment, ENVIRONMENT_MAP),
     operator: normalizeOperator(record?.operator),
-    result: mapCode(record?.result, RESULT_MAP),
+    result: mapCode(record?.result, HISTORY_RESULT_MAP),
     createdAt: formatDateOnly(record?.createdAt),
     inspectionTime: formatDateOnly(record?.inspectionTime)
   }
@@ -127,7 +135,7 @@ function normalizeDetailRecord(record) {
     mode: mapCode(record?.mode, MODE_MAP),
     environment: mapCode(record?.environment, ENVIRONMENT_MAP),
     operator: normalizeOperator(record?.operator),
-    result: mapCode(record?.result, RESULT_MAP),
+    result: mapCode(record?.result, DETAIL_RESULT_MAP),
     createdAt: formatDateOnly(record?.createdAt),
     inspectionTime: formatDateOnly(record?.inspectionTime),
     videoUrl: normalizeAssetUrl(record?.videoUrl),
@@ -239,6 +247,20 @@ function buildAutoSegmentPoints(zCenter) {
   })
 }
 
+function getAutoDetectPointCount() {
+  return 1 + Math.ceil(AUTO_TOTAL_LENGTH_M / AUTO_STEP_LENGTH_M)
+}
+
+function buildAutoSegmentCenters() {
+  const segmentCount = getAutoDetectPointCount()
+  const midpoint = (segmentCount - 1) / 2
+  return Array.from({ length: segmentCount }, (_item, index) => (index - midpoint) * AUTO_STEP_LENGTH_M)
+}
+
+function classifyInspectionResult(value) {
+  return String(value || '').trim() === '0' ? '0' : '1'
+}
+
 function normalizeMode(isManual) {
   return isManual ? 'manual' : 'auto'
 }
@@ -323,6 +345,7 @@ function buildDefaultPointCloud() {
 }
 
 const INITIAL_DEFAULT_MOCK_POINT_CLOUD = buildDefaultPointCloud()
+const INITIAL_AUTO_SEGMENT_CENTERS = Object.freeze(buildAutoSegmentCenters())
 
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
@@ -364,7 +387,8 @@ export const useDashboardStore = defineStore('dashboard', {
     autoAssemblyActive: false,
     autoAssemblySegmentCount: 0,
     autoAssemblyPoints: [],
-    autoAssemblySegmentCenters: [...AUTO_SEGMENT_CENTERS],
+    completedAutoAssemblyPoints: [],
+    autoAssemblySegmentCenters: [...INITIAL_AUTO_SEGMENT_CENTERS],
     testModeEnabled: false,
     testState: TEST_MODE_STATES.IDLE,
     triggerCount: 0,
@@ -391,6 +415,12 @@ export const useDashboardStore = defineStore('dashboard', {
       if (this.autoAssemblyActive) {
         this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
         this.pointCloudPoints = this.autoAssemblyPoints.slice()
+        return
+      }
+
+      if (this.patrolMode === 'auto' && this.completedAutoAssemblyPoints.length) {
+        this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
+        this.pointCloudPoints = this.completedAutoAssemblyPoints.slice()
         return
       }
 
@@ -452,9 +482,11 @@ export const useDashboardStore = defineStore('dashboard', {
         return false
       }
 
+      this.completedAutoAssemblyPoints = []
       this.autoAssemblyActive = true
       this.autoAssemblySegmentCount = 0
       this.autoAssemblyPoints = []
+      this.autoAssemblySegmentCenters = buildAutoSegmentCenters()
       this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
       this.pointCloudPoints = []
       return true
@@ -472,10 +504,23 @@ export const useDashboardStore = defineStore('dashboard', {
       this.pointCloudPoints = this.autoAssemblyPoints.slice()
       return true
     },
+    completeAutoAssemblyDisplay() {
+      this.completedAutoAssemblyPoints = this.autoAssemblyPoints.slice()
+      this.autoAssemblyActive = false
+      this.autoAssemblySegmentCount = 0
+      this.autoAssemblyPoints = []
+      this.autoAssemblySegmentCenters = buildAutoSegmentCenters()
+      this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.AUTO_ASSEMBLY
+      this.pointCloudPoints = this.completedAutoAssemblyPoints.slice()
+    },
+    clearCompletedAutoAssembly() {
+      this.completedAutoAssemblyPoints = []
+    },
     resetAutoAssembly(restoreDisplay = true) {
       this.autoAssemblyActive = false
       this.autoAssemblySegmentCount = 0
       this.autoAssemblyPoints = []
+      this.autoAssemblySegmentCenters = buildAutoSegmentCenters()
       if (restoreDisplay) {
         this.restoreDefaultPointCloud()
       }
@@ -488,6 +533,7 @@ export const useDashboardStore = defineStore('dashboard', {
 
       if (nextValue) {
         this.resetAutoAssembly(false)
+        this.clearCompletedAutoAssembly()
         this.testModeEnabled = true
         this.testState = TEST_MODE_STATES.WAITING_START
         this.triggerCount = 0
@@ -623,6 +669,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.pendingPatrolMode = ''
       if (isManual && previousMode !== 'manual') {
         this.resetAutoAssembly(false)
+        this.clearCompletedAutoAssembly()
         if (!this.testModeEnabled) {
           this.restoreDefaultPointCloud()
         }
@@ -721,3 +768,11 @@ export const useDashboardStore = defineStore('dashboard', {
     }
   }
 })
+
+export {
+  AUTO_TOTAL_LENGTH_M,
+  AUTO_FIRST_DETECT_OFFSET_M,
+  AUTO_STEP_LENGTH_M,
+  getAutoDetectPointCount,
+  classifyInspectionResult
+}

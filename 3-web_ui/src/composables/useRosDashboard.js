@@ -8,6 +8,8 @@ import { appConfig } from '../config/app'
 
 const POINT_CLOUD_TIMEOUT_MS = 2500
 const MAX_POINT_CLOUD_POINTS = 5000
+const AUTO_DETECT_DONE_DELAY_MS = 3000
+const MOTION_REACHED_EVENT_DEDUP_MS = 400
 const TEST_START_DELAY_MS = 0
 const TEST_CAPTURE_LOAD_DELAY_MS = 0
 const TEST_FINISH_COOLDOWN_MS = 0
@@ -130,14 +132,19 @@ export function useRosDashboard() {
 
   let streamWatchdogId = 0
   let hasLoggedPointCloudFrame = false
-  let lastMotionReachedValue = false
+  let lastMotionReachedEventAt = 0
   let testStartTimerId = 0
   let testProcessTimerId = 0
   let testCooldownTimerId = 0
+  let autoDetectDoneTimerId = 0
   let autoSessionId = ''
   let testSessionId = ''
   let manualSessionId = ''
   let autoFinishing = false
+  let autoAwaitingReturnHome = false
+  let autoCompletionArmed = false
+  let currentAutoReturnHomeDoneValue = false
+  let autoReturnHomeDoneConsumed = false
 
   function getEnvironmentCode() {
     return store.waterDetected ? '1' : '0'
@@ -171,6 +178,63 @@ export function useRosDashboard() {
     testCooldownTimerId = 0
   }
 
+  function clearAutoDetectDoneTimer() {
+    window.clearTimeout(autoDetectDoneTimerId)
+    autoDetectDoneTimerId = 0
+  }
+
+  function resetAutoFlowState() {
+    clearAutoDetectDoneTimer()
+    autoAwaitingReturnHome = false
+    autoCompletionArmed = false
+    lastMotionReachedEventAt = 0
+    currentAutoReturnHomeDoneValue = false
+    autoReturnHomeDoneConsumed = false
+  }
+
+  function buildAsciiPcd(points) {
+    const normalized = Array.isArray(points)
+      ? points.filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y) && Number.isFinite(point?.z))
+      : []
+
+    if (!normalized.length) {
+      return ''
+    }
+
+    const header = [
+      '# .PCD v0.7 - Point Cloud Data file format',
+      'VERSION 0.7',
+      'FIELDS x y z',
+      'SIZE 4 4 4',
+      'TYPE F F F',
+      'COUNT 1 1 1',
+      `WIDTH ${normalized.length}`,
+      'HEIGHT 1',
+      'VIEWPOINT 0 0 0 1 0 0 0',
+      `POINTS ${normalized.length}`,
+      'DATA ascii'
+    ]
+
+    const body = normalized.map((point) => `${point.x} ${point.y} ${point.z}`)
+    return `${header.join('\n')}\n${body.join('\n')}\n`
+  }
+
+  function getCurrentPointCloudPayload(mode) {
+    const points = mode === '2'
+      ? store.testAssemblyPoints
+      : mode === '1'
+        ? store.autoAssemblyPoints
+        : []
+    const pointCloudPcdContent = buildAsciiPcd(points)
+    if (!pointCloudPcdContent) {
+      return {}
+    }
+    return {
+      pointCloudFileName: 'pointclouds.pcd',
+      pointCloudPcdContent
+    }
+  }
+
   function publishManualMode(isManual) {
     rosService.publish(appConfig.topics.manualModeCommand, {
       data: isManual
@@ -181,6 +245,12 @@ export function useRosDashboard() {
     if (mode !== 'auto' && autoSessionId) {
       await abortSession(autoSessionId)
       autoSessionId = ''
+      resetAutoFlowState()
+      store.clearCompletedAutoAssembly()
+      store.resetAutoAssembly()
+    }
+    if (mode !== 'auto' && !autoSessionId) {
+      store.clearCompletedAutoAssembly()
       store.resetAutoAssembly()
     }
 
@@ -212,10 +282,11 @@ export function useRosDashboard() {
       if (!autoSessionId) {
         throw new Error('empty session id')
       }
-      lastMotionReachedValue = false
+      resetAutoFlowState()
       rosService.publish(appConfig.topics.startAuto, { data: true })
     } catch (error) {
       store.resetAutoAssembly()
+      resetAutoFlowState()
       debugLog('start auto inspection recording failed', getAxiosMessage(error))
       showRequestError('自动巡检录像启动失败', error)
     }
@@ -229,10 +300,14 @@ export function useRosDashboard() {
     autoFinishing = true
     const sessionId = autoSessionId
     autoSessionId = ''
+    resetAutoFlowState()
 
     try {
-      await finishInspectionSession(sessionId, { copyDefectImages: false })
-      store.resetAutoAssembly()
+      await finishInspectionSession(sessionId, {
+        copyDefectImages: false,
+        ...getCurrentPointCloudPayload('1')
+      })
+      store.completeAutoAssemblyDisplay()
       await store.loadHistory({ page: 1 })
     } catch (error) {
       debugLog('finish auto inspection recording failed', getAxiosMessage(error))
@@ -294,6 +369,50 @@ export function useRosDashboard() {
 
   function markDetectDone() {
     rosService.publish(appConfig.topics.detectDone, { data: true })
+  }
+
+  function scheduleAutoDetectDone() {
+    if (!autoSessionId || !store.autoAssemblyActive) {
+      return
+    }
+
+    const isLastDetectPoint = store.autoAssemblySegmentCount >= store.autoAssemblySegmentCenters.length
+    clearAutoDetectDoneTimer()
+    autoDetectDoneTimerId = window.setTimeout(() => {
+      autoDetectDoneTimerId = 0
+      markDetectDone()
+      if (isLastDetectPoint) {
+        autoAwaitingReturnHome = true
+        if (currentAutoReturnHomeDoneValue && !autoReturnHomeDoneConsumed) {
+          handleAutoReturnHomeDoneEvent()
+        }
+      }
+    }, AUTO_DETECT_DONE_DELAY_MS)
+  }
+
+  function handleAutoMotionReachedEvent() {
+    if (
+      !store.autoAssemblyActive ||
+      !autoSessionId ||
+      currentAutoReturnHomeDoneValue ||
+      autoReturnHomeDoneConsumed
+    ) {
+      return
+    }
+
+    store.appendNextAutoAssemblySegment()
+    autoCompletionArmed = true
+    scheduleAutoDetectDone()
+  }
+
+  function handleAutoReturnHomeDoneEvent() {
+    if (!autoSessionId || autoFinishing || autoReturnHomeDoneConsumed || !autoCompletionArmed) {
+      return
+    }
+
+    autoReturnHomeDoneConsumed = true
+    autoAwaitingReturnHome = false
+    completeAutoInspection()
   }
 
   function publishUiScriptCommand(scriptName) {
@@ -423,7 +542,10 @@ export function useRosDashboard() {
       }
 
       try {
-        await finishInspectionSession(sessionId, { copyDefectImages: true })
+        await finishInspectionSession(sessionId, {
+          copyDefectImages: true,
+          ...getCurrentPointCloudPayload('2')
+        })
         await store.loadHistory({ page: 1 })
       } catch (error) {
         debugLog('finish test recording failed', getAxiosMessage(error))
@@ -527,13 +649,23 @@ export function useRosDashboard() {
     unsubscribers.push(
       rosService.subscribe(appConfig.topics.motionReached, (message) => {
         const value = Boolean(message.data)
-        if (value && !lastMotionReachedValue) {
-          const appended = store.appendNextAutoAssemblySegment()
-          if (!appended && store.autoAssemblyActive && autoSessionId) {
-            completeAutoInspection()
+        if (value) {
+          const now = Date.now()
+          if (now - lastMotionReachedEventAt >= MOTION_REACHED_EVENT_DEDUP_MS) {
+            lastMotionReachedEventAt = now
+            handleAutoMotionReachedEvent()
           }
         }
-        lastMotionReachedValue = value
+      })
+    )
+
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.autoReturnHomeDone, (message) => {
+        const value = Boolean(message.data)
+        currentAutoReturnHomeDoneValue = value
+        if (value && !autoReturnHomeDoneConsumed && autoCompletionArmed) {
+          handleAutoReturnHomeDoneEvent()
+        }
       })
     )
 
@@ -568,6 +700,7 @@ export function useRosDashboard() {
   onBeforeUnmount(() => {
     window.clearInterval(streamWatchdogId)
     clearTestTimers()
+    clearAutoDetectDoneTimer()
 
     if (autoSessionId) {
       abortSession(autoSessionId)

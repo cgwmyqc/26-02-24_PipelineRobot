@@ -73,11 +73,11 @@
             <img
               v-if="item.fileUrl || item.imageUrl"
               :src="item.fileUrl || item.imageUrl"
-              :alt="getAnomalyLabel(item.anomalyType)"
+              :alt="getAnomalyLabel(item)"
             />
             <div v-else class="tile-empty">暂无图片</div>
             <div class="image-caption">
-              <strong>{{ getAnomalyLabel(item.anomalyType) }}</strong>
+              <strong>{{ getAnomalyLabel(item) }}</strong>
             </div>
           </button>
         </div>
@@ -148,7 +148,7 @@ const ANOMALY_MAP = Object.freeze({
   BX: '变形',
   SG: '树根',
   ZAW: '阻碍物',
-  RG: '人工捕获'
+  RG: '人工识别'
 })
 const MAX_IMPORTED_PCD_POINTS = 5000
 const pcdLoader = new PCDLoader()
@@ -195,6 +195,33 @@ const primaryVideoUrl = computed(() => {
   return videoList.value[0]?.fileUrl || ''
 })
 
+function parseAnomalyFromFileName(item) {
+  const candidates = [
+    item?.fileName,
+    item?.remark,
+    item?.filePath,
+    item?.imageUrl,
+    item?.fileUrl
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+
+  for (const candidate of candidates) {
+    const fileName = candidate.split('/').pop() || candidate
+    const baseName = fileName.replace(/\.[^.]+$/, '')
+    const parts = baseName
+      .split('_')
+      .map((part) => part.trim().toUpperCase())
+      .filter((part) => ANOMALY_MAP[part])
+
+    if (parts.length) {
+      return parts.map((part) => ANOMALY_MAP[part]).join('/')
+    }
+  }
+
+  return ''
+}
+
 function mapAnomalyType(value) {
   const normalized = String(value || '').trim().toUpperCase()
   if (!normalized) {
@@ -213,8 +240,11 @@ function mapAnomalyType(value) {
   return parts.map((item) => ANOMALY_MAP[item] || item).join(' / ')
 }
 
-function getAnomalyLabel(value) {
-  return mapAnomalyType(value)
+function getAnomalyLabel(itemOrValue) {
+  if (itemOrValue && typeof itemOrValue === 'object') {
+    return parseAnomalyFromFileName(itemOrValue) || mapAnomalyType(itemOrValue.anomalyType)
+  }
+  return mapAnomalyType(itemOrValue)
 }
 
 function getPointItemKey(item) {

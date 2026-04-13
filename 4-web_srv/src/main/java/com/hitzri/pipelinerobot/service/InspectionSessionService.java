@@ -2,8 +2,10 @@ package com.hitzri.pipelinerobot.service;
 
 import com.hitzri.pipelinerobot.config.StorageProperties;
 import com.hitzri.pipelinerobot.entity.InspectionAnomalyImage;
+import com.hitzri.pipelinerobot.entity.InspectionPointFile;
 import com.hitzri.pipelinerobot.entity.InspectionRecord;
 import com.hitzri.pipelinerobot.mapper.InspectionAnomalyImageMapper;
+import com.hitzri.pipelinerobot.mapper.InspectionPointFileMapper;
 import com.hitzri.pipelinerobot.mapper.InspectionRecordMapper;
 import com.hitzri.pipelinerobot.vo.InspectionMediaFileVO;
 import java.io.IOException;
@@ -45,6 +47,7 @@ public class InspectionSessionService {
 
     private final InspectionRecordMapper inspectionRecordMapper;
     private final InspectionAnomalyImageMapper anomalyImageMapper;
+    private final InspectionPointFileMapper pointFileMapper;
     private final StorageProperties storageProperties;
 
     private final Map<String, SessionContext> sessions = new ConcurrentHashMap<>();
@@ -52,10 +55,12 @@ public class InspectionSessionService {
     public InspectionSessionService(
         InspectionRecordMapper inspectionRecordMapper,
         InspectionAnomalyImageMapper anomalyImageMapper,
+        InspectionPointFileMapper pointFileMapper,
         StorageProperties storageProperties
     ) {
         this.inspectionRecordMapper = inspectionRecordMapper;
         this.anomalyImageMapper = anomalyImageMapper;
+        this.pointFileMapper = pointFileMapper;
         this.storageProperties = storageProperties;
     }
 
@@ -122,7 +127,12 @@ public class InspectionSessionService {
     }
 
     @Transactional
-    public Long finishSession(String sessionId, boolean copyDefectImages) throws IOException, InterruptedException {
+    public Long finishSession(
+        String sessionId,
+        boolean copyDefectImages,
+        String pointCloudFileName,
+        String pointCloudPcdContent
+    ) throws IOException, InterruptedException {
         SessionContext context = getSession(sessionId);
         stopRecorderProcess(context);
 
@@ -180,6 +190,8 @@ public class InspectionSessionService {
             }
         }
 
+        savePointCloudFile(record.getId(), pointsDir, pointCloudFileName, pointCloudPcdContent, now);
+
         record.setResultSummary(calculateResultSummary(anomalyTypes));
         inspectionRecordMapper.updateById(record);
 
@@ -220,6 +232,38 @@ public class InspectionSessionService {
         image.setRemark(remark);
         image.setCapturedAt(capturedAt);
         anomalyImageMapper.insert(image);
+    }
+
+    private void insertPointFile(Long inspectionId, String relativePath, LocalDateTime capturedAt) {
+        InspectionPointFile pointFile = new InspectionPointFile();
+        pointFile.setInspectionId(inspectionId);
+        pointFile.setPointPath(relativePath);
+        pointFile.setCapturedAt(capturedAt);
+        pointFileMapper.insert(pointFile);
+    }
+
+    private void savePointCloudFile(
+        Long inspectionId,
+        Path pointsDir,
+        String pointCloudFileName,
+        String pointCloudPcdContent,
+        LocalDateTime capturedAt
+    ) throws IOException {
+        String normalizedContent = String.valueOf(pointCloudPcdContent == null ? "" : pointCloudPcdContent).trim();
+        if (!StringUtils.hasText(normalizedContent)) {
+            return;
+        }
+
+        String normalizedFileName = StringUtils.hasText(pointCloudFileName)
+            ? Paths.get(pointCloudFileName).getFileName().toString()
+            : "pointclouds.pcd";
+        if (!normalizedFileName.toLowerCase(Locale.ROOT).endsWith(".pcd")) {
+            normalizedFileName = normalizedFileName + ".pcd";
+        }
+
+        Path targetPath = pointsDir.resolve(normalizedFileName).normalize();
+        Files.writeString(targetPath, normalizedContent + System.lineSeparator(), StandardCharsets.UTF_8);
+        insertPointFile(inspectionId, toRelativeStoragePath(targetPath), capturedAt);
     }
 
     private List<Path> copyDefectImagesToResult(Path imagesDir) throws IOException {

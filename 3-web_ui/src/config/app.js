@@ -43,6 +43,10 @@ export const appConfig = {
       name: '/fixed_controller/motion_reached',
       messageType: 'std_msgs/msg/Bool'
     },
+    autoReturnHomeDone: {
+      name: '/fixed_controller/auto_return_home_done',
+      messageType: 'std_msgs/msg/Bool'
+    },
     manualModeCommand: {
       name: '/fixed_controller/set_manual_mode',
       messageType: 'std_msgs/msg/Bool'
