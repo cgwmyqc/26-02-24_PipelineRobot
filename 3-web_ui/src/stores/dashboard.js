@@ -67,8 +67,8 @@ const DEFAULT_AXIAL_JITTER = 0.05
 const AUTO_SEGMENT_POINT_COUNT = 1200
 const AUTO_SEGMENT_LENGTH = 0.32
 const AUTO_SEGMENT_AXIAL_JITTER = 0.02
-const TEST_CAPTURE_MAX_POINTS = 1000
-const TEST_ASSEMBLY_TOTAL_MAX_POINTS = 18000
+const TEST_CAPTURE_MAX_POINTS = 1500
+const TEST_ASSEMBLY_TOTAL_MAX_POINTS = 30000
 
 function formatDateOnly(value) {
   if (!value) {
@@ -567,6 +567,7 @@ export const useDashboardStore = defineStore('dashboard', {
     beginTestCooldown(untilTimestamp) {
       this.testState = TEST_MODE_STATES.COOLDOWN
       this.cooldownUntil = Number(untilTimestamp || 0)
+      this.fitViewAvailable = true
     },
     finishTestCooldown() {
       if (!this.testModeEnabled) {

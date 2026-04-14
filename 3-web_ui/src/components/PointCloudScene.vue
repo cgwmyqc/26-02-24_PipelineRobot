@@ -420,6 +420,39 @@ function addAxisMeasurementLabels(placement) {
   fitGroup.add(endLabel)
 }
 
+function getFittedLabelOffsetScale(placement) {
+  return Math.max(0.2, 1 - FITTED_WALL_THICKNESS / placement.radius) + 0.6
+}
+
+function getDiameterLabelPosition(placement, isStart) {
+  const circumferenceTheta = Math.atan2(-0.1, -0.18)
+  const zValue = isStart ? placement.zMin : placement.zMax
+  const axisOffset = isStart ? -0.03 : 0.03
+  return createPointOnPipe(
+    placement,
+    zValue,
+    circumferenceTheta,
+    getFittedLabelOffsetScale(placement)
+  ).addScaledVector(placement.axis, axisOffset)
+}
+
+function addDiameterLabels(placement) {
+  const diameterText = `${(placement.radius * 2).toFixed(1)}m`
+  const labelOptions = {
+    color: '#DFF7FF',
+    background: 'rgba(8, 26, 41, 0.82)',
+    renderOrder: 18
+  }
+
+  const startLabel = createTextSprite(diameterText, labelOptions)
+  startLabel.position.copy(getDiameterLabelPosition(placement, true))
+  fitGroup.add(startLabel)
+
+  const endLabel = createTextSprite(diameterText, labelOptions)
+  endLabel.position.copy(getDiameterLabelPosition(placement, false))
+  fitGroup.add(endLabel)
+}
+
 function createDefectPatchGeometry(placement, defect) {
   const thetaCenter = normalizePlacementValue(defect?.theta_center, normalizePlacementValue(defect?.theta_rad, 0))
     + Z_AXIS_ROTATION_OFFSET
@@ -481,7 +514,7 @@ function getDefectLabelPosition(placement, defect) {
       placement,
       zValue,
       thetaCenter,
-      Math.max(0.2, 1 - FITTED_WALL_THICKNESS / placement.radius) + 0.7
+      getFittedLabelOffsetScale(placement) + 0.1
     )
   }
 
@@ -491,7 +524,7 @@ function getDefectLabelPosition(placement, defect) {
     placement,
     zValue,
     theta,
-    Math.max(0.2, 1 - FITTED_WALL_THICKNESS / placement.radius) + 0.6
+    getFittedLabelOffsetScale(placement)
   )
 }
 
@@ -565,6 +598,7 @@ function renderFittedScene() {
   axisLine.renderOrder = 16
   fitGroup.add(axisLine)
   addAxisMeasurementLabels(placement)
+  addDiameterLabels(placement)
 
   const defects = Array.isArray(props.fittedData?.defects) ? props.fittedData.defects : []
   defects.forEach((defect) => {
