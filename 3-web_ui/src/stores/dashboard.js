@@ -34,6 +34,31 @@ const ANOMALY_MAP = {
   RG: '人工捕获'
 }
 
+const ANALYSIS_STATUS = Object.freeze({
+  OK: 'ok',
+  CHECKING: 'checking',
+  WARNING: 'warning'
+})
+
+const ANALYSIS_STATUS_IMAGE_MAP = Object.freeze({
+  [ANALYSIS_STATUS.OK]: 'status_ok',
+  [ANALYSIS_STATUS.CHECKING]: 'status_checking',
+  [ANALYSIS_STATUS.WARNING]: 'status_warning'
+})
+
+const ANALYSIS_MESSAGE_MAP = Object.freeze({
+  [ANALYSIS_STATUS.OK]: ['排水管道状态良好，无异常。'],
+  [ANALYSIS_STATUS.CHECKING]: ['管道状态检测中…']
+})
+
+const ANALYSIS_ANOMALY_MESSAGE_MAP = Object.freeze({
+  BX: '管道变形，请及时处理！',
+  PL: '管道破裂，请及时处理！',
+  ZAW: '管道有阻碍物，请及时处理！',
+  SG: '管道有树根，请及时处理！',
+  RG: '人工识别缺陷，请及时处理！'
+})
+
 export const POINT_CLOUD_DISPLAY_MODES = Object.freeze({
   MOCK: 'mock',
   AUTO_ASSEMBLY: 'auto_assembly',
@@ -165,6 +190,48 @@ function mapAnomalyType(value) {
   }
 
   return ANOMALY_MAP[normalized] || normalized
+}
+
+function getDefaultAnalysisState(status = ANALYSIS_STATUS.OK) {
+  return {
+    status,
+    imageKey: ANALYSIS_STATUS_IMAGE_MAP[status],
+    messages: [...(ANALYSIS_MESSAGE_MAP[status] || ANALYSIS_MESSAGE_MAP[ANALYSIS_STATUS.OK])]
+  }
+}
+
+function normalizeAnomalyTokens(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) {
+    return []
+  }
+
+  return normalized
+    .split('+')
+    .map((item) => String(item || '').trim().toUpperCase())
+    .filter(Boolean)
+}
+
+function mapAnalysisMessagesFromAnomalies(anomalies) {
+  if (!Array.isArray(anomalies) || !anomalies.length) {
+    return []
+  }
+
+  const uniqueTokens = new Set()
+  const messages = []
+
+  anomalies.forEach((item) => {
+    const tokens = normalizeAnomalyTokens(item?.anomalyType)
+    tokens.forEach((token) => {
+      if (uniqueTokens.has(token) || !ANALYSIS_ANOMALY_MESSAGE_MAP[token]) {
+        return
+      }
+      uniqueTokens.add(token)
+      messages.push(ANALYSIS_ANOMALY_MESSAGE_MAP[token])
+    })
+  })
+
+  return messages
 }
 
 const mockHistory = [
@@ -354,11 +421,80 @@ export const useDashboardStore = defineStore('dashboard', {
     fitViewAvailable: false,
     fittedPipeData: null,
     fittedPipeLoading: false,
-    fittedPipeLoadError: ''
+    fittedPipeLoadError: '',
+    analysisStatus: ANALYSIS_STATUS.OK,
+    analysisImageKey: ANALYSIS_STATUS_IMAGE_MAP[ANALYSIS_STATUS.OK],
+    analysisMessages: [...ANALYSIS_MESSAGE_MAP[ANALYSIS_STATUS.OK]],
+    lastSettledAnalysisStatus: ANALYSIS_STATUS.OK,
+    lastSettledAnalysisImageKey: ANALYSIS_STATUS_IMAGE_MAP[ANALYSIS_STATUS.OK],
+    lastSettledAnalysisMessages: [...ANALYSIS_MESSAGE_MAP[ANALYSIS_STATUS.OK]]
   }),
   actions: {
     setRosConnected(status) {
       this.rosConnected = status
+    },
+    applyAnalysisState(state, { settle = false } = {}) {
+      const normalizedState = {
+        ...getDefaultAnalysisState(state?.status || ANALYSIS_STATUS.OK),
+        ...state,
+        messages: Array.isArray(state?.messages) && state.messages.length
+          ? state.messages.slice()
+          : getDefaultAnalysisState(state?.status || ANALYSIS_STATUS.OK).messages
+      }
+
+      this.analysisStatus = normalizedState.status
+      this.analysisImageKey = normalizedState.imageKey
+      this.analysisMessages = normalizedState.messages
+
+      if (settle) {
+        this.lastSettledAnalysisStatus = normalizedState.status
+        this.lastSettledAnalysisImageKey = normalizedState.imageKey
+        this.lastSettledAnalysisMessages = normalizedState.messages.slice()
+      }
+    },
+    resetAnalysisStatusToOk() {
+      this.applyAnalysisState(getDefaultAnalysisState(ANALYSIS_STATUS.OK), { settle: true })
+    },
+    setAnalysisStatusChecking() {
+      this.applyAnalysisState(getDefaultAnalysisState(ANALYSIS_STATUS.CHECKING))
+    },
+    revertAnalysisStatus() {
+      this.applyAnalysisState({
+        status: this.lastSettledAnalysisStatus,
+        imageKey: this.lastSettledAnalysisImageKey,
+        messages: this.lastSettledAnalysisMessages
+      })
+    },
+    setAnalysisStatusFromInspectionDetail(detailRecord) {
+      if (!Array.isArray(detailRecord?.anomalies)) {
+        return false
+      }
+
+      const messages = mapAnalysisMessagesFromAnomalies(detailRecord?.anomalies)
+      if (!messages.length) {
+        this.resetAnalysisStatusToOk()
+        return true
+      }
+
+      this.applyAnalysisState({
+        status: ANALYSIS_STATUS.WARNING,
+        imageKey: ANALYSIS_STATUS_IMAGE_MAP[ANALYSIS_STATUS.WARNING],
+        messages
+      }, { settle: true })
+      return true
+    },
+    async syncAnalysisStatusFromInspection(inspectionId) {
+      const normalizedId = Number(inspectionId)
+      if (!normalizedId) {
+        return false
+      }
+
+      const { data } = await fetchInspectionDetail(normalizedId)
+      if (!data || typeof data !== 'object') {
+        return false
+      }
+
+      return this.setAnalysisStatusFromInspectionDetail(data)
     },
     restoreDefaultPointCloud() {
       if (this.testModeEnabled) {
@@ -733,6 +869,7 @@ export {
   AUTO_TOTAL_LENGTH_M,
   AUTO_FIRST_DETECT_OFFSET_M,
   AUTO_STEP_LENGTH_M,
+  ANALYSIS_STATUS,
   getAutoDetectPointCount,
   classifyInspectionResult
 }

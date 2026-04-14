@@ -271,6 +271,7 @@ export function useRosDashboard() {
       resetAutoFlowState()
       store.clearCompletedAutoAssembly()
       store.resetAutoAssembly()
+      store.revertAnalysisStatus()
     }
     if (mode !== 'auto' && !autoSessionId) {
       store.clearCompletedAutoAssembly()
@@ -281,6 +282,7 @@ export function useRosDashboard() {
       await abortSession(manualSessionId)
       manualSessionId = ''
       manualRecordingActive.value = false
+      store.revertAnalysisStatus()
     }
 
     store.setPendingPatrolMode(mode)
@@ -306,6 +308,7 @@ export function useRosDashboard() {
         throw new Error('empty session id')
       }
       resetAutoFlowState()
+      store.setAnalysisStatusChecking()
       rosService.publish(appConfig.topics.startAuto, { data: true })
     } catch (error) {
       store.resetAutoAssembly()
@@ -326,17 +329,23 @@ export function useRosDashboard() {
     resetAutoFlowState()
 
     try {
-      await finishInspectionSession(sessionId, {
+      const { data } = await finishInspectionSession(sessionId, {
         copyDefectImages: false,
         ...getCurrentPointCloudPayload('1')
       })
       store.completeAutoAssemblyDisplay()
+      try {
+        await store.syncAnalysisStatusFromInspection(data?.inspectionId)
+      } catch (error) {
+        debugLog('sync auto analysis status failed', getAxiosMessage(error))
+      }
       await store.loadHistory({ page: 1 })
     } catch (error) {
       debugLog('finish auto inspection recording failed', getAxiosMessage(error))
       showRequestError('自动巡检录像结束失败', error)
       await abortSession(sessionId)
       store.resetAutoAssembly()
+      store.revertAnalysisStatus()
     } finally {
       autoFinishing = false
     }
@@ -352,12 +361,18 @@ export function useRosDashboard() {
       manualSessionId = ''
       manualRecordingActive.value = false
       try {
-        await finishInspectionSession(sessionId, { copyDefectImages: false })
+        const { data } = await finishInspectionSession(sessionId, { copyDefectImages: false })
+        try {
+          await store.syncAnalysisStatusFromInspection(data?.inspectionId)
+        } catch (syncError) {
+          debugLog('sync manual analysis status failed', getAxiosMessage(syncError))
+        }
         await store.loadHistory({ page: 1 })
       } catch (error) {
         debugLog('finish manual recording failed', getAxiosMessage(error))
         showRequestError('人工巡检录像保存失败', error)
         await abortSession(sessionId)
+        store.revertAnalysisStatus()
       }
       return
     }
@@ -369,6 +384,7 @@ export function useRosDashboard() {
       }
       manualSessionId = sessionId
       manualRecordingActive.value = true
+      store.setAnalysisStatusChecking()
     } catch (error) {
       manualSessionId = ''
       manualRecordingActive.value = false
@@ -455,6 +471,7 @@ export function useRosDashboard() {
       if (testSessionId) {
         await abortSession(testSessionId)
         testSessionId = ''
+        store.revertAnalysisStatus()
       }
       store.setTestModeEnabled(false)
       publishUiScriptCommand('stop_pipe_system.sh')
@@ -488,6 +505,7 @@ export function useRosDashboard() {
       return
     }
 
+    store.setAnalysisStatusChecking()
     publishUiScriptCommand('start_pipe_system.sh')
     testStartTimerId = window.setTimeout(() => {
       if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
@@ -604,16 +622,22 @@ export function useRosDashboard() {
       }
 
       try {
-        await finishInspectionSession(sessionId, {
+        const { data } = await finishInspectionSession(sessionId, {
           copyDefectImages: true,
           copyFittedResult: true,
           ...getCurrentPointCloudPayload('2')
         })
+        try {
+          await store.syncAnalysisStatusFromInspection(data?.inspectionId)
+        } catch (syncError) {
+          debugLog('sync test analysis status failed', getAxiosMessage(syncError))
+        }
         await store.loadHistory({ page: 1 })
       } catch (error) {
         debugLog('finish test recording failed', getAxiosMessage(error))
         showRequestError('测试模式录像保存失败', error)
         await abortSession(sessionId)
+        store.revertAnalysisStatus()
       } finally {
         if (testSessionId === sessionId) {
           testSessionId = ''

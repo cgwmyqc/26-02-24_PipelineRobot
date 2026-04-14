@@ -2,23 +2,110 @@
   <section class="panel analysis-panel">
     <div class="panel-title">监测分析</div>
     <div class="panel-body analysis-body">
-      <div class="analysis-card">
-        <div class="hexagon cyan">裂</div>
-        <div>
-          <h3>裂缝识别</h3>
-          <p>下水管道结构完整，未见裂缝迹象，运行状态正常。</p>
-        </div>
+      <div class="analysis-visual">
+        <img :src="statusImage" :alt="statusAlt" class="analysis-image">
       </div>
-      <div class="analysis-card">
-        <div class="hexagon orange">变</div>
-        <div>
-          <h3 class="danger">变形分析</h3>
-          <p>下水管道存在变形迹象，请及时安排复核和处理。</p>
+
+      <div
+        ref="messageViewportRef"
+        :class="['analysis-message-viewport', { scrolling: shouldScroll }]"
+      >
+        <div
+          ref="messageTrackRef"
+          class="analysis-message-track"
+          :style="trackStyle"
+        >
+          <p
+            v-for="(message, index) in renderedMessages"
+            :key="`${message}-${index}`"
+            class="analysis-message"
+          >
+            {{ message }}
+          </p>
         </div>
       </div>
     </div>
   </section>
 </template>
+
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { resolveImageAsset } from '../utils/assets'
+import { ANALYSIS_STATUS, useDashboardStore } from '../stores/dashboard'
+
+const store = useDashboardStore()
+const { analysisStatus, analysisImageKey, analysisMessages } = storeToRefs(store)
+
+const messageViewportRef = ref(null)
+const messageTrackRef = ref(null)
+const shouldScroll = ref(false)
+
+let resizeObserver = null
+
+const statusImage = computed(() => resolveImageAsset(analysisImageKey.value))
+const statusAlt = computed(() => {
+  if (analysisStatus.value === ANALYSIS_STATUS.CHECKING) {
+    return '管道状态检测中'
+  }
+  if (analysisStatus.value === ANALYSIS_STATUS.WARNING) {
+    return '管道状态异常预警'
+  }
+  return '管道状态正常'
+})
+
+const renderedMessages = computed(() => (
+  shouldScroll.value
+    ? analysisMessages.value.concat(analysisMessages.value)
+    : analysisMessages.value
+))
+
+const trackStyle = computed(() => ({
+  '--analysis-scroll-duration': `${Math.max(8, analysisMessages.value.length * 3)}s`
+}))
+
+async function updateScrollState() {
+  await nextTick()
+
+  const viewport = messageViewportRef.value
+  const track = messageTrackRef.value
+  if (!viewport || !track) {
+    shouldScroll.value = false
+    return
+  }
+
+  if (analysisStatus.value !== ANALYSIS_STATUS.WARNING || analysisMessages.value.length <= 1) {
+    shouldScroll.value = false
+    return
+  }
+
+  shouldScroll.value = track.scrollHeight > viewport.clientHeight + 1
+}
+
+watch(
+  () => [analysisStatus.value, analysisMessages.value.join('|')],
+  () => {
+    updateScrollState()
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateScrollState()
+    })
+
+    if (messageViewportRef.value) {
+      resizeObserver.observe(messageViewportRef.value)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+})
+</script>
 
 <style scoped>
 .analysis-panel {
@@ -27,59 +114,76 @@
 }
 
 .analysis-body {
-  display: grid;
-  gap: 18px;
-  padding: 18px;
-  align-content: start;
-}
-
-.analysis-card {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  min-height: 88px;
-  padding: 14px 12px;
-  background: rgba(22, 34, 49, 0.72);
+  gap: 18px;
+  height: 100%;
+  padding: 12px 18px 24px;
 }
 
-.hexagon {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  clip-path: polygon(25% 6%, 75% 6%, 100% 50%, 75% 94%, 25% 94%, 0 50%);
-  font-size: 26px;
-  font-weight: 700;
+.analysis-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
-.cyan {
-  color: #061720;
-  background: linear-gradient(135deg, #74f0c2, #54e6ff);
-  box-shadow: 0 0 18px rgba(84, 230, 255, 0.25);
+.analysis-image {
+  display: block;
+  max-width: min(100%, 390px);
+  max-height: 260px;
+  object-fit: contain;
 }
 
-.orange {
-  color: #290d04;
-  background: linear-gradient(135deg, #ff8a5e, #ff4c1e);
-  box-shadow: 0 0 18px rgba(255, 110, 69, 0.2);
+.analysis-message-viewport {
+  position: relative;
+  width: min(100%, 320px);
+  min-height: 34px;
+  max-height: 104px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%);
 }
 
-h3 {
-  margin: 0 0 6px;
-  color: #7ff3c8;
-  font-size: 18px;
-  line-height: 1.2;
+.analysis-message-track {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.danger {
-  color: #ff6b45;
+.analysis-message-viewport.scrolling .analysis-message-track {
+  animation: scroll-messages var(--analysis-scroll-duration, 10s) linear infinite;
 }
 
-p {
+.analysis-message {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 13px;
+  color: #dbe6f2;
+  font-size: 18px;
   line-height: 1.6;
+  text-align: center;
+}
+
+@keyframes scroll-messages {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-50% - 5px));
+  }
+}
+
+@media (max-width: 768px) {
+  .analysis-body {
+    padding: 20px 14px;
+  }
+
+  .analysis-image {
+    max-height: 180px;
+  }
+
+  .analysis-message {
+    font-size: 16px;
+  }
 }
 </style>
