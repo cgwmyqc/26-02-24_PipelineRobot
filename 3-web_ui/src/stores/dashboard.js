@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
-import { PCDLoader } from 'three/examples/jsm/loaders/PCDLoader.js'
 import { exportInspectionRecord, fetchInspectionDetail, fetchInspectionHistory } from '../api/history'
-import { fetchPipeDatasetFittedResult, fetchPipeDatasetPointCloud } from '../api/pointCloud'
+import { fetchPipeDatasetFittedResult } from '../api/pointCloud'
 import { appConfig } from '../config/app'
 
 const MODE_MAP = {
@@ -58,6 +57,8 @@ const AUTO_STEP_LENGTH_M = 0.3
 const TEST_CAPTURE_MAX_COUNT = 14
 const TEST_CAPTURE_FIRST_Z = -2.0
 const TEST_CAPTURE_Z_STEP = 0.3
+const TEST_CAPTURE_X_OFFSET_M = 0
+const TEST_CAPTURE_Y_OFFSET_M = 0
 const DEFAULT_PIPE_POINT_COUNT = 15000
 const DEFAULT_PIPE_RADIUS = 1.0
 const DEFAULT_PIPE_LENGTH = 4.0
@@ -66,9 +67,8 @@ const DEFAULT_AXIAL_JITTER = 0.05
 const AUTO_SEGMENT_POINT_COUNT = 1200
 const AUTO_SEGMENT_LENGTH = 0.32
 const AUTO_SEGMENT_AXIAL_JITTER = 0.02
-const MAX_IMPORTED_PCD_POINTS = 5000
-
-const pcdLoader = new PCDLoader()
+const TEST_CAPTURE_MAX_POINTS = 1000
+const TEST_ASSEMBLY_TOTAL_MAX_POINTS = 18000
 
 function formatDateOnly(value) {
   if (!value) {
@@ -276,68 +276,21 @@ function normalizeAssetUrl(url) {
   }
 }
 
-function formatStopId(stopNumber) {
-  return `stop_${String(stopNumber).padStart(4, '0')}`
-}
-
 function getTestSegmentTargetZ(stopNumber) {
   return TEST_CAPTURE_FIRST_Z + (stopNumber - 1) * TEST_CAPTURE_Z_STEP
 }
 
-function centerPointsAtOrigin(points) {
-  if (!Array.isArray(points) || !points.length) {
-    return []
+function reducePoints(points, targetCount) {
+  if (!Array.isArray(points) || points.length <= targetCount) {
+    return Array.isArray(points) ? points.slice() : []
   }
 
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-  let minZ = Infinity
-  let maxZ = -Infinity
-
-  points.forEach((point) => {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
-    minZ = Math.min(minZ, point.z)
-    maxZ = Math.max(maxZ, point.z)
-  })
-
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-  const centerZ = (minZ + maxZ) / 2
-
-  return points.map((point) => ({
-    x: point.x - centerX,
-    y: point.y - centerY,
-    z: point.z - centerZ
-  }))
-}
-
-function parsePcdArrayBuffer(arrayBuffer) {
-  const parsed = pcdLoader.parse(arrayBuffer, '')
-  const positionAttribute = parsed?.geometry?.getAttribute('position')
-  if (!positionAttribute?.array?.length) {
-    return []
+  const step = Math.max(1, Math.ceil(points.length / targetCount))
+  const reduced = []
+  for (let index = 0; index < points.length && reduced.length < targetCount; index += step) {
+    reduced.push(points[index])
   }
-
-  const step = Math.max(1, Math.ceil(positionAttribute.count / MAX_IMPORTED_PCD_POINTS))
-  const points = []
-
-  for (let index = 0; index < positionAttribute.count; index += step) {
-    const offset = index * 3
-    const x = positionAttribute.array[offset]
-    const y = positionAttribute.array[offset + 1]
-    const z = positionAttribute.array[offset + 2]
-
-    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
-      points.push({ x, y, z })
-    }
-  }
-
-  return points
+  return reduced
 }
 
 function buildDefaultPointCloud() {
@@ -580,23 +533,27 @@ export const useDashboardStore = defineStore('dashboard', {
       this.pointCloudPoints = []
       this.resetFitViewState(true)
     },
-    async loadAndAppendTestCapture(stopNumber) {
-      const stopId = formatStopId(stopNumber)
-      const arrayBuffer = await fetchPipeDatasetPointCloud(stopId)
-      const parsedPoints = parsePcdArrayBuffer(arrayBuffer)
-      if (!parsedPoints.length) {
-        throw new Error(`PCD file ${stopId} contains no valid points`)
+    appendTestCapturePoints(stopNumber, points) {
+      const normalizedPoints = Array.isArray(points)
+        ? points.filter((point) => Number.isFinite(point?.x) && Number.isFinite(point?.y) && Number.isFinite(point?.z))
+        : []
+
+      if (!normalizedPoints.length) {
+        throw new Error('Integrated point cloud contains no valid points')
       }
 
-      const centeredPoints = centerPointsAtOrigin(parsedPoints)
+      const reducedPoints = reducePoints(normalizedPoints, TEST_CAPTURE_MAX_POINTS)
       const targetZ = getTestSegmentTargetZ(stopNumber)
-      const translatedPoints = centeredPoints.map((point) => ({
-        x: point.x,
-        y: point.y,
+      const translatedPoints = reducedPoints.map((point) => ({
+        x: point.x + TEST_CAPTURE_X_OFFSET_M,
+        y: point.y + TEST_CAPTURE_Y_OFFSET_M,
         z: point.z + targetZ
       }))
 
-      this.testAssemblyPoints = this.testAssemblyPoints.concat(translatedPoints)
+      this.testAssemblyPoints = reducePoints(
+        this.testAssemblyPoints.concat(translatedPoints),
+        TEST_ASSEMBLY_TOTAL_MAX_POINTS
+      )
       this.triggerCount = stopNumber
       this.pointCloudDisplayMode = POINT_CLOUD_DISPLAY_MODES.TEST_ASSEMBLY
       this.pointCloudPoints = this.testAssemblyPoints.slice()

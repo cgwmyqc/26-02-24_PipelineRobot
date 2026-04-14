@@ -34,67 +34,82 @@
         <div class="hud-grid">
           <div class="action-groups">
             <div class="motion-actions hud-panel hud-block">
-              <button
-                class="image-action-btn"
-                :class="{ inactive: !isManualMode }"
-                :disabled="!isManualMode"
-                @mousedown="toggleMove('forward', true)"
-                @mouseup="toggleMove('forward', false)"
-                @mouseleave="toggleMove('forward', false)"
-                @blur="toggleMove('forward', false)"
-                @touchstart.prevent="toggleMove('forward', true)"
-                @touchend.prevent="toggleMove('forward', false)"
-                @touchcancel.prevent="toggleMove('forward', false)"
-              >
-                <img v-if="forwardButtonImage" :src="forwardButtonImage" alt="前进">
-                <span v-else>前进</span>
-              </button>
+              <div class="action-item">
+                <button
+                  class="image-action-btn"
+                  :class="{ inactive: !isManualMode }"
+                  :disabled="!isManualMode"
+                  @mousedown="toggleMove('forward', true)"
+                  @mouseup="toggleMove('forward', false)"
+                  @mouseleave="toggleMove('forward', false)"
+                  @blur="toggleMove('forward', false)"
+                  @touchstart.prevent="toggleMove('forward', true)"
+                  @touchend.prevent="toggleMove('forward', false)"
+                  @touchcancel.prevent="toggleMove('forward', false)"
+                >
+                  <img v-if="forwardButtonImage" :src="forwardButtonImage" alt="前进">
+                  <span v-else>前进</span>
+                </button>
+                <div class="action-label">前进</div>
+              </div>
 
-              <button
-                class="image-action-btn"
-                :class="{ inactive: !isManualMode }"
-                :disabled="!isManualMode"
-                @mousedown="toggleMove('reverse', true)"
-                @mouseup="toggleMove('reverse', false)"
-                @mouseleave="toggleMove('reverse', false)"
-                @blur="toggleMove('reverse', false)"
-                @touchstart.prevent="toggleMove('reverse', true)"
-                @touchend.prevent="toggleMove('reverse', false)"
-                @touchcancel.prevent="toggleMove('reverse', false)"
-              >
-                <img v-if="reverseButtonImage" :src="reverseButtonImage" alt="后退">
-                <span v-else>后退</span>
-              </button>
+              <div class="action-item">
+                <button
+                  class="image-action-btn"
+                  :class="{ inactive: !isManualMode }"
+                  :disabled="!isManualMode"
+                  @mousedown="toggleMove('reverse', true)"
+                  @mouseup="toggleMove('reverse', false)"
+                  @mouseleave="toggleMove('reverse', false)"
+                  @blur="toggleMove('reverse', false)"
+                  @touchstart.prevent="toggleMove('reverse', true)"
+                  @touchend.prevent="toggleMove('reverse', false)"
+                  @touchcancel.prevent="toggleMove('reverse', false)"
+                >
+                  <img v-if="reverseButtonImage" :src="reverseButtonImage" alt="后退">
+                  <span v-else>后退</span>
+                </button>
+                <div class="action-label">后退</div>
+              </div>
 
-              <button
-                class="image-action-btn"
-                :class="{ inactive: !isAutoMode }"
-                :disabled="!isAutoMode"
-                @click="startAutoInspection"
-              >
-                <img v-if="startButtonImage" :src="startButtonImage" alt="开始自动巡检">
-                <span v-else>自动</span>
-              </button>
+              <div class="action-item">
+                <button
+                  class="image-action-btn"
+                  :class="{ inactive: !isAutoMode }"
+                  :disabled="!isAutoMode"
+                  @click="startAutoInspection"
+                >
+                  <img v-if="startButtonImage" :src="startButtonImage" alt="开始自动巡检">
+                  <span v-else>自动</span>
+                </button>
+                <div class="action-label">自动</div>
+              </div>
             </div>
 
             <div class="manual-actions hud-panel hud-block">
-              <button
-                class="image-action-btn"
-                :class="{ inactive: !isManualMode }"
-                :disabled="!isManualMode"
-                @click="toggleManualRecording"
-              >
-                <img :src="recordButtonImage" alt="录制按钮">
-              </button>
+              <div class="action-item">
+                <button
+                  class="image-action-btn"
+                  :class="{ inactive: !isManualMode }"
+                  :disabled="!isManualMode"
+                  @click="toggleManualRecording"
+                >
+                  <img :src="recordButtonImage" alt="录制按钮">
+                </button>
+                <div class="action-label">录制</div>
+              </div>
 
-              <button
-                class="image-action-btn"
-                :class="{ inactive: !isManualMode || !manualRecordingActive }"
-                :disabled="!isManualMode || !manualRecordingActive"
-                @click="captureManualSnapshot"
-              >
-                <img :src="captureButtonImage" alt="拍照按钮">
-              </button>
+              <div class="action-item">
+                <button
+                  class="image-action-btn"
+                  :class="{ inactive: !isManualMode || !manualRecordingActive }"
+                  :disabled="!isManualMode || !manualRecordingActive"
+                  @click="captureManualSnapshot"
+                >
+                  <img :src="captureButtonImage" alt="拍照按钮">
+                </button>
+                <div class="action-label">拍照</div>
+              </div>
             </div>
 
             <div v-if="testModeEnabled" class="test-actions hud-panel hud-block">
@@ -226,7 +241,9 @@ const humidityImage = resolveImageAsset('hum')
 const mudheightImage = resolveImageAsset('mudheight')
 const recordStopImage = resolveImageAsset('record_stop')
 const recordIngImage = resolveImageAsset('record_ing')
-const captureButtonImage = resolveImageAsset('capture')
+const recordDisabledImage = resolveImageAsset('record_disactive')
+const captureActiveImage = resolveImageAsset('capture')
+const captureDisabledImage = resolveImageAsset('capture_disactive')
 
 const isManualMode = computed(() => props.patrolMode === 'manual')
 const isAutoMode = computed(() => props.patrolMode === 'auto')
@@ -246,7 +263,18 @@ const humidityText = computed(() => `${formatValue(props.humidity, 1)} %`)
 const forwardButtonImage = computed(() => (isManualMode.value ? forwardActiveImage : forwardInactiveImage))
 const reverseButtonImage = computed(() => (isManualMode.value ? reverseActiveImage : reverseInactiveImage))
 const startButtonImage = computed(() => (isAutoMode.value ? startActiveImage : startInactiveImage))
-const recordButtonImage = computed(() => (props.manualRecordingActive ? recordIngImage : recordStopImage))
+const recordButtonImage = computed(() => {
+  if (!isManualMode.value) {
+    return recordDisabledImage
+  }
+  return props.manualRecordingActive ? recordIngImage : recordStopImage
+})
+const captureButtonImage = computed(() => {
+  if (!isManualMode.value) {
+    return captureDisabledImage
+  }
+  return captureActiveImage
+})
 
 const testModeModel = computed({
   get: () => Boolean(props.testModeEnabled),
@@ -456,6 +484,19 @@ function toggleMove(direction, active) {
   border-radius: 18px;
 }
 
+.action-item {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.action-label {
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
 .test-meta {
   display: grid;
   gap: 6px;
@@ -616,13 +657,13 @@ function toggleMove(direction, active) {
 
   .motion-actions {
     grid-auto-flow: column;
-    grid-template-columns: repeat(3, 53px);
+    grid-template-columns: repeat(3, minmax(53px, auto));
     min-height: auto;
   }
 
   .manual-actions {
     grid-auto-flow: column;
-    grid-template-columns: repeat(2, 53px);
+    grid-template-columns: repeat(2, minmax(53px, auto));
     min-height: auto;
   }
 

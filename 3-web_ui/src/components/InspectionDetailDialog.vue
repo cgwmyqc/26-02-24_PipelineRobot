@@ -32,7 +32,9 @@
           </div>
           <div class="meta-row">
             <span>分析结果</span>
-            <strong>{{ record?.result || '--' }}</strong>
+            <strong :class="{ 'result-anomaly': detailResultSummary === '异常' }">
+              {{ detailResultSummary }}
+            </strong>
           </div>
         </section>
 
@@ -187,6 +189,7 @@ const pointList = computed(() => {
   return []
 })
 const activePointKey = computed(() => getPointItemKey(activePointFile.value))
+const detailResultSummary = computed(() => normalizeDetailResult(props.record?.result))
 
 const primaryVideoUrl = computed(() => {
   if (activeVideo.value) {
@@ -194,6 +197,27 @@ const primaryVideoUrl = computed(() => {
   }
   return videoList.value[0]?.fileUrl || ''
 })
+
+function normalizeDetailResult(value) {
+  if (value === null || value === undefined) {
+    return '--'
+  }
+
+  const normalized = String(value).trim()
+  if (!normalized) {
+    return '--'
+  }
+
+  if (normalized === '0' || normalized === '无异常') {
+    return '无异常'
+  }
+
+  if (normalized === '--') {
+    return '--'
+  }
+
+  return '异常'
+}
 
 function parseAnomalyFromFileName(item) {
   const candidates = [
@@ -394,6 +418,10 @@ watch(
 
 .meta-row strong {
   text-align: right;
+}
+
+.result-anomaly {
+  color: #ff5a5f;
 }
 
 .video-player {

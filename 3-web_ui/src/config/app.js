@@ -98,6 +98,10 @@ export const appConfig = {
     pointCloud: {
       name: '/web_ui/point_cloud',
       messageType: 'sensor_msgs/msg/PointCloud2'
+    },
+    testPointCloudSource: {
+      name: '/livox/lidar',
+      messageType: 'sensor_msgs/msg/PointCloud2'
     }
   }
 }

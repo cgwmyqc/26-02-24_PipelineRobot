@@ -71,3 +71,10 @@ npm run dev
 
 - 点云如果是 `sensor_msgs/msg/PointCloud2`，建议增加后端解码或在前端补充 PointCloud2 解析。
 - 历史查询详情和导出按钮目前只保留界面，后续接业务接口。
+
+## 测试模式点云积分
+
+- 测试模式触发按钮会继续发送 `trigger_stop_capture.sh`
+- 前端会直接订阅 `/livox/lidar`，在默认 `1000ms` 窗口内本地积分
+- 积分完成后，前端把这次静态点云结果按测试序号沿 Z 轴叠加到场景
+- 普通实时点云预览仍继续使用 `/web_ui/point_cloud`

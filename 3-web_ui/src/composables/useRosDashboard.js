@@ -8,10 +8,14 @@ import { appConfig } from '../config/app'
 
 const POINT_CLOUD_TIMEOUT_MS = 2500
 const MAX_POINT_CLOUD_POINTS = 5000
+const MAX_TEST_CAPTURE_FRAME_POINTS = 1800
+const TEST_CAPTURE_FILTER_X_LIMIT_M = 0.7
+const TEST_CAPTURE_FILTER_Y_LIMIT_M = 0.7
+const TEST_CAPTURE_FILTER_Z_LIMIT_M = 0.5
 const AUTO_DETECT_DONE_DELAY_MS = 3000
 const MOTION_REACHED_EVENT_DEDUP_MS = 400
 const TEST_START_DELAY_MS = 0
-const TEST_CAPTURE_LOAD_DELAY_MS = 0
+const TEST_CAPTURE_INTEGRATION_MS = 100
 const TEST_FINISH_COOLDOWN_MS = 0
 const IS_DEV = import.meta.env.DEV
 
@@ -82,7 +86,7 @@ function getFieldOffset(fields, fieldName) {
     : undefined
 }
 
-function decodePointCloud(message) {
+function decodePointCloud(message, maxPoints = MAX_POINT_CLOUD_POINTS) {
   const bytes = normalizeByteArray(message?.data)
   const pointStep = Number(message?.point_step || 0)
   const width = Number(message?.width || 0)
@@ -101,7 +105,7 @@ function decodePointCloud(message) {
 
   const littleEndian = !message?.is_bigendian
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const step = Math.max(1, Math.ceil(totalPoints / MAX_POINT_CLOUD_POINTS))
+  const step = Math.max(1, Math.ceil(totalPoints / Math.max(1, maxPoints)))
   const points = []
 
   for (let index = 0; index < totalPoints; index += step) {
@@ -120,6 +124,18 @@ function decodePointCloud(message) {
   }
 
   return points
+}
+
+function filterTestCapturePoints(points) {
+  if (!Array.isArray(points) || !points.length) {
+    return []
+  }
+
+  return points.filter((point) => (
+    Math.abs(point.x) <= TEST_CAPTURE_FILTER_X_LIMIT_M
+    && Math.abs(point.y) <= TEST_CAPTURE_FILTER_Y_LIMIT_M
+    && Math.abs(point.z) <= TEST_CAPTURE_FILTER_Z_LIMIT_M
+  ))
 }
 
 export function useRosDashboard() {
@@ -145,6 +161,7 @@ export function useRosDashboard() {
   let autoCompletionArmed = false
   let currentAutoReturnHomeDoneValue = false
   let autoReturnHomeDoneConsumed = false
+  let pendingTestCapture = null
 
   function getEnvironmentCode() {
     return store.waterDetected ? '1' : '0'
@@ -176,6 +193,12 @@ export function useRosDashboard() {
     testStartTimerId = 0
     testProcessTimerId = 0
     testCooldownTimerId = 0
+  }
+
+  function resetPendingTestCapture() {
+    window.clearTimeout(testProcessTimerId)
+    testProcessTimerId = 0
+    pendingTestCapture = null
   }
 
   function clearAutoDetectDoneTimer() {
@@ -426,6 +449,7 @@ export function useRosDashboard() {
 
   async function setTestModeEnabled(enabled) {
     clearTestTimers()
+    resetPendingTestCapture()
 
     if (!enabled) {
       if (testSessionId) {
@@ -473,30 +497,63 @@ export function useRosDashboard() {
     }, TEST_START_DELAY_MS)
   }
 
-  async function completeTestCapture(stopNumber, token) {
+  function handleTestPointCloudCaptureFrame(message) {
+    if (!pendingTestCapture) {
+      return
+    }
+
+    const { token, pointGroups } = pendingTestCapture
+    if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
+      resetPendingTestCapture()
+      return
+    }
+
     try {
-      await store.loadAndAppendTestCapture(stopNumber)
+      const points = decodePointCloud(message, MAX_TEST_CAPTURE_FRAME_POINTS)
+      const filteredPoints = filterTestCapturePoints(points)
+      if (filteredPoints.length) {
+        pointGroups.push(filteredPoints)
+      }
     } catch (error) {
-      const status = getAxiosStatus(error)
-      if (status === 404) {
-        debugLog(`test capture PCD missing for stop_${String(stopNumber).padStart(4, '0')}`, {
-          status,
-          message: getAxiosMessage(error)
-        })
-      } else if (error instanceof Error && /contains no valid points/i.test(error.message)) {
-        debugLog(`test capture PCD parse failed for stop_${String(stopNumber).padStart(4, '0')}`, {
-          message: error.message
-        })
-      } else {
-        debugLog('test capture load failed', {
-          status,
-          message: getAxiosMessage(error),
-          error
-        })
-      }
-      if (store.testModeEnabled && token === store.pcdLoadSequenceToken) {
-        store.setTestWaitingTrigger()
-      }
+      debugLog('test integration point cloud decode failed', {
+        token,
+        error
+      })
+    }
+  }
+
+  function completeTestCapture(stopNumber, token) {
+    if (!pendingTestCapture || pendingTestCapture.stopNumber !== stopNumber || pendingTestCapture.token !== token) {
+      return
+    }
+
+    const mergedPoints = pendingTestCapture.pointGroups.flat()
+    resetPendingTestCapture()
+
+    if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
+      return
+    }
+
+    if (!mergedPoints.length) {
+      debugLog('test capture integration finished without valid livox frames', {
+        stopNumber,
+        token
+      })
+      store.setTestWaitingTrigger()
+      ElMessage.error('测试点云积分失败，1000ms 内未收到 /livox/lidar 有效点云')
+      return
+    }
+
+    try {
+      store.appendTestCapturePoints(stopNumber, mergedPoints)
+    } catch (error) {
+      debugLog('test capture integration append failed', {
+        stopNumber,
+        token,
+        error
+      })
+      store.setTestWaitingTrigger()
+      ElMessage.error(error?.message || '测试点云积分结果处理失败')
     }
   }
 
@@ -515,13 +572,18 @@ export function useRosDashboard() {
       return
     }
 
+    pendingTestCapture = {
+      stopNumber,
+      token,
+      pointGroups: []
+    }
     publishUiScriptCommand('trigger_stop_capture.sh')
     testProcessTimerId = window.setTimeout(() => {
       if (!store.testModeEnabled || token !== store.pcdLoadSequenceToken) {
         return
       }
       completeTestCapture(stopNumber, token)
-    }, TEST_CAPTURE_LOAD_DELAY_MS)
+    }, TEST_CAPTURE_INTEGRATION_MS)
   }
 
   function finishTestSequence() {
@@ -694,6 +756,12 @@ export function useRosDashboard() {
       })
     )
 
+    unsubscribers.push(
+      rosService.subscribe(appConfig.topics.testPointCloudSource, (message) => {
+        handleTestPointCloudCaptureFrame(message)
+      })
+    )
+
     store.loadHistory()
   })
 
@@ -701,6 +769,7 @@ export function useRosDashboard() {
     window.clearInterval(streamWatchdogId)
     clearTestTimers()
     clearAutoDetectDoneTimer()
+    resetPendingTestCapture()
 
     if (autoSessionId) {
       abortSession(autoSessionId)
