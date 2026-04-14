@@ -14,6 +14,7 @@ public class InspectionDetailVO {
     private LocalDateTime createdAt;
 
     private String videoUrl;
+    private String fittedResultUrl;
     private List<InspectionAnomalyImageVO> anomalies;
 
     private List<InspectionMediaFileVO> videos;
@@ -36,6 +37,8 @@ public class InspectionDetailVO {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public String getVideoUrl() { return videoUrl; }
     public void setVideoUrl(String videoUrl) { this.videoUrl = videoUrl; }
+    public String getFittedResultUrl() { return fittedResultUrl; }
+    public void setFittedResultUrl(String fittedResultUrl) { this.fittedResultUrl = fittedResultUrl; }
     public List<InspectionAnomalyImageVO> getAnomalies() { return anomalies; }
     public void setAnomalies(List<InspectionAnomalyImageVO> anomalies) { this.anomalies = anomalies; }
     public List<InspectionMediaFileVO> getVideos() { return videos; }

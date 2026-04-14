@@ -118,6 +118,20 @@
         </div>
         <div v-else class="empty-state">当前记录暂无点云文件</div>
       </section>
+
+      <section class="detail-card point-card">
+        <div class="section-title">拟合数据</div>
+        <div v-if="record?.fittedResultUrl" class="point-content">
+          <div v-if="fittedResultLoading" class="point-placeholder">拟合文件加载中...</div>
+          <div v-else-if="fittedResultLoadError" class="point-placeholder">
+            {{ fittedResultLoadError }}
+          </div>
+          <div v-else-if="detailFittedPipeData" class="point-scene-wrap">
+            <PointCloudScene :points="[]" :fitted-data="detailFittedPipeData" mode="fitted" />
+          </div>
+        </div>
+        <div v-else class="empty-state detail-empty-state">当前无点云拟合文件</div>
+      </section>
     </div>
   </el-dialog>
 </template>
@@ -161,6 +175,9 @@ const activePointFile = ref(null)
 const pointCloudLoading = ref(false)
 const pointCloudLoadError = ref('')
 const detailPointCloudPoints = ref([])
+const fittedResultLoading = ref(false)
+const fittedResultLoadError = ref('')
+const detailFittedPipeData = ref(null)
 
 const videoList = computed(() => {
   if (Array.isArray(props.record?.videos) && props.record.videos.length) {
@@ -331,6 +348,33 @@ async function loadPointCloud(item) {
   }
 }
 
+async function loadFittedResult(fileUrl) {
+  if (!fileUrl) {
+    detailFittedPipeData.value = null
+    fittedResultLoadError.value = ''
+    fittedResultLoading.value = false
+    return
+  }
+
+  fittedResultLoading.value = true
+  fittedResultLoadError.value = ''
+
+  try {
+    const response = await request.get(fileUrl, {
+      baseURL: ''
+    })
+    if (!response?.data || typeof response.data !== 'object') {
+      throw new Error('拟合文件内容无效')
+    }
+    detailFittedPipeData.value = response.data
+  } catch (error) {
+    detailFittedPipeData.value = null
+    fittedResultLoadError.value = error?.response?.data?.message || error?.message || '拟合文件加载失败'
+  } finally {
+    fittedResultLoading.value = false
+  }
+}
+
 function setActivePointFile(item) {
   activePointFile.value = item || null
 }
@@ -345,6 +389,9 @@ watch(
     detailPointCloudPoints.value = []
     pointCloudLoadError.value = ''
     pointCloudLoading.value = false
+    detailFittedPipeData.value = null
+    fittedResultLoadError.value = ''
+    fittedResultLoading.value = false
   },
   { immediate: true }
 )
@@ -359,6 +406,20 @@ watch(
       return
     }
     loadPointCloud(value)
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.record?.fittedResultUrl,
+  (value) => {
+    detailFittedPipeData.value = null
+    fittedResultLoadError.value = ''
+    if (!value) {
+      fittedResultLoading.value = false
+      return
+    }
+    loadFittedResult(value)
   },
   { immediate: true }
 )
@@ -426,13 +487,13 @@ watch(
 
 .video-player {
   width: 100%;
-  min-height: 260px;
+  min-height: 400px;
   background: #07111d;
 }
 
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -469,8 +530,8 @@ watch(
 
 .preview-image {
   width: 100%;
-  max-height: 420px;
-  object-fit: contain;
+  max-height: 500px;
+  object-fit: cover;
   background: #07111d;
 }
 
@@ -519,8 +580,19 @@ watch(
   background: rgba(12, 24, 38, 0.46);
 }
 
+
 @media (max-width: 900px) {
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .image-grid {
     grid-template-columns: 1fr;
   }
 }

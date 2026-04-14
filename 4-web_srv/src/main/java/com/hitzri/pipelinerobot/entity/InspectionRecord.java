@@ -16,6 +16,7 @@ public class InspectionRecord {
     private String resultSummary;
     private String resultDir;
     private String videoPath;
+    private String fittedResultPath;
     private LocalDateTime inspectionTime;
     private LocalDateTime createdAt;
 
@@ -33,6 +34,8 @@ public class InspectionRecord {
     public void setResultDir(String resultDir) { this.resultDir = resultDir; }
     public String getVideoPath() { return videoPath; }
     public void setVideoPath(String videoPath) { this.videoPath = videoPath; }
+    public String getFittedResultPath() { return fittedResultPath; }
+    public void setFittedResultPath(String fittedResultPath) { this.fittedResultPath = fittedResultPath; }
     public LocalDateTime getInspectionTime() { return inspectionTime; }
     public void setInspectionTime(LocalDateTime inspectionTime) { this.inspectionTime = inspectionTime; }
     public LocalDateTime getCreatedAt() { return createdAt; }

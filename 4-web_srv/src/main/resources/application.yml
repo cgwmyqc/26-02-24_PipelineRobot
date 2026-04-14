@@ -26,6 +26,8 @@ mybatis-plus:
       id-type: auto
 
 app:
+  demo:
+    seed-enabled: ${APP_DEMO_SEED_ENABLED:true}
   jwt:
     secret: ${JWT_SECRET:PipelineRobotJwtSecretKeyForDevOnly1234567890}
     expiration-seconds: ${JWT_EXPIRE_SECONDS:86400}

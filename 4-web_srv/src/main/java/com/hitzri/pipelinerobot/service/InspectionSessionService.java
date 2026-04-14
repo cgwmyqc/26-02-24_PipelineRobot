@@ -130,6 +130,7 @@ public class InspectionSessionService {
     public Long finishSession(
         String sessionId,
         boolean copyDefectImages,
+        boolean copyFittedResult,
         String pointCloudFileName,
         String pointCloudPcdContent
     ) throws IOException, InterruptedException {
@@ -191,6 +192,7 @@ public class InspectionSessionService {
         }
 
         savePointCloudFile(record.getId(), pointsDir, pointCloudFileName, pointCloudPcdContent, now);
+        record.setFittedResultPath(copyFittedResult ? copyFittedResultToResult(pointsDir) : null);
 
         record.setResultSummary(calculateResultSummary(anomalyTypes));
         inspectionRecordMapper.updateById(record);
@@ -285,6 +287,22 @@ public class InspectionSessionService {
             copied.add(target);
         }
         return copied;
+    }
+
+    private String copyFittedResultToResult(Path pointsDir) throws IOException {
+        Path sourcePath = Paths.get(storageProperties.getPipeDatasetRoot())
+            .toAbsolutePath()
+            .normalize()
+            .resolve("defects_global.json")
+            .normalize();
+
+        if (!Files.exists(sourcePath) || !Files.isRegularFile(sourcePath)) {
+            return null;
+        }
+
+        Path targetPath = pointsDir.resolve("defects_global.json").normalize();
+        Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        return toRelativeStoragePath(targetPath);
     }
 
     private String calculateResultSummary(List<String> anomalyTypes) {

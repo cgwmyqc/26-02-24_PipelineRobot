@@ -94,6 +94,9 @@ public class FileController {
         if (normalized.endsWith(".pcd")) {
             return MediaType.APPLICATION_OCTET_STREAM;
         }
+        if (normalized.endsWith(".json")) {
+            return MediaType.APPLICATION_JSON;
+        }
         if (normalized.endsWith(".png")) {
             return MediaType.IMAGE_PNG;
         }

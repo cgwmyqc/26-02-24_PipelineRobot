@@ -138,6 +138,7 @@ public class InspectionService {
         vo.setInspectionTime(record.getInspectionTime());
         vo.setCreatedAt(record.getCreatedAt());
         vo.setVideoUrl(videoPaths.isEmpty() ? "" : buildPublicUrl(videoPaths.get(0)));
+        vo.setFittedResultUrl(buildPublicUrl(record.getFittedResultPath()));
         vo.setAnomalies(anomalies);
         vo.setVideos(toMediaVOs(videoPaths, record.getInspectionTime()));
         vo.setImages(toMediaVOs(imagePaths, imageCapturedAt));

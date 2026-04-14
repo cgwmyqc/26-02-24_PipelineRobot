@@ -134,3 +134,6 @@ out/
 
 4-web_srv/storage/.sessions/
 4-web_srv/storage/**/*.log
+
+/storage/
+/4-web_srv/storage/

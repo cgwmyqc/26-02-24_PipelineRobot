@@ -139,6 +139,7 @@ function normalizeDetailRecord(record) {
     createdAt: formatDateOnly(record?.createdAt),
     inspectionTime: formatDateOnly(record?.inspectionTime),
     videoUrl: normalizeAssetUrl(record?.videoUrl),
+    fittedResultUrl: normalizeAssetUrl(record?.fittedResultUrl),
     videos,
     images,
     points,
@@ -196,6 +197,7 @@ const mockDetail = {
   inspectionTime: '2026-03-20',
   createdAt: '2026-03-20',
   videoUrl: '',
+  fittedResultUrl: '',
   anomalies: [
     {
       id: 1,

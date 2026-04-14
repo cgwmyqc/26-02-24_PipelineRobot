@@ -167,3 +167,8 @@ chmod +x start.sh
 路由器用户名密码
 用户名：admin
 密码：hitzri@1231
+
+
+调试阶段模拟数据库
+app.demo.seed-enabled 开关，默认开启，可以用 APP_DEMO_SEED_ENABLED=false 关闭。
+

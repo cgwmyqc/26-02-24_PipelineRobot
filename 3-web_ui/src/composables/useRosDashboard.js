@@ -606,6 +606,7 @@ export function useRosDashboard() {
       try {
         await finishInspectionSession(sessionId, {
           copyDefectImages: true,
+          copyFittedResult: true,
           ...getCurrentPointCloudPayload('2')
         })
         await store.loadHistory({ page: 1 })

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS inspection_record (
   result_summary VARCHAR(255) NOT NULL,
   result_dir VARCHAR(255),
   video_path VARCHAR(255),
+  fitted_result_path VARCHAR(255),
   inspection_time DATETIME NOT NULL,
   created_at DATETIME NOT NULL,
   INDEX idx_inspection_mode (mode),

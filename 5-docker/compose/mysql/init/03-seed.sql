@@ -11,16 +11,16 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO inspection_record (id, mode, environment, operator_name, result_summary, result_dir, video_path, inspection_time, created_at)
 VALUES
-  (1, '1', '0', 'admin', '1', 'results/20260320091501', 'results/20260320091501/videos/inspection_1_20260320091501.mp4', '2026-03-20 09:12:00', '2026-03-20 09:15:00'),
-  (2, '0', '1', 'admin', '2', 'results/20260319141002', 'results/20260319141002/videos/inspection_0_20260319141002.mp4', '2026-03-19 14:05:00', '2026-03-19 14:10:00'),
-  (3, '2', '1', 'admin', '2', 'results/20260318102403', 'results/20260318102403/videos/inspection_2_20260318102403.mp4', '2026-03-18 10:20:00', '2026-03-18 10:24:00'),
-  (4, '1', '1', 'admin', '0', 'results/20260317161404', 'results/20260317161404/videos/inspection_1_20260317161404.mp4', '2026-03-17 16:10:00', '2026-03-17 16:14:00'),
-  (5, '0', '0', 'admin', '1', 'results/20260316113605', 'results/20260316113605/videos/inspection_0_20260316113605.mp4', '2026-03-16 11:32:00', '2026-03-16 11:36:00'),
-  (6, '2', '0', 'admin', '2', 'results/20260315131206', 'results/20260315131206/videos/inspection_2_20260315131206.mp4', '2026-03-15 13:08:00', '2026-03-15 13:12:00'),
-  (7, '1', '1', 'admin', '2', 'results/20260314095307', 'results/20260314095307/videos/inspection_1_20260314095307.mp4', '2026-03-14 09:48:00', '2026-03-14 09:53:00'),
-  (8, '0', '1', 'admin', '0', 'results/20260313154308', 'results/20260313154308/videos/inspection_0_20260313154308.mp4', '2026-03-13 15:40:00', '2026-03-13 15:43:00'),
-  (9, '2', '0', 'admin', '1', 'results/20260312105909', 'results/20260312105909/videos/inspection_2_20260312105909.mp4', '2026-03-12 10:55:00', '2026-03-12 10:59:00'),
-  (10, '1', '1', 'admin', '0', 'results/20260311172710', 'results/20260311172710/videos/inspection_1_20260311172710.mp4', '2026-03-11 17:22:00', '2026-03-11 17:27:00')
+  (1, '1', '0', 'admin', '1', 'results/20260320101100', 'results/20260320101100/videos/inspection_1_20260320101100.mp4', '2026-03-20 10:07:00', '2026-03-20 10:11:00'),
+  (2, '0', '1', 'admin', '2', 'results/20260319111200', 'results/20260319111200/videos/inspection_0_20260319111200.mp4', '2026-03-19 11:07:00', '2026-03-19 11:12:00'),
+  (3, '2', '1', 'admin', '2', 'results/20260318091300', 'results/20260318091300/videos/inspection_2_20260318091300.mp4', '2026-03-18 09:07:00', '2026-03-18 09:13:00'),
+  (4, '1', '1', 'admin', '0', 'results/20260317101400', 'results/20260317101400/videos/inspection_1_20260317101400.mp4', '2026-03-17 10:07:00', '2026-03-17 10:14:00'),
+  (5, '0', '0', 'admin', '1', 'results/20260316111500', 'results/20260316111500/videos/inspection_0_20260316111500.mp4', '2026-03-16 11:07:00', '2026-03-16 11:15:00'),
+  (6, '2', '0', 'admin', '2', 'results/20260315091600', 'results/20260315091600/videos/inspection_2_20260315091600.mp4', '2026-03-15 09:07:00', '2026-03-15 09:16:00'),
+  (7, '1', '1', 'admin', '2', 'results/20260314101700', 'results/20260314101700/videos/inspection_1_20260314101700.mp4', '2026-03-14 10:07:00', '2026-03-14 10:17:00'),
+  (8, '0', '1', 'admin', '0', 'results/20260313111800', 'results/20260313111800/videos/inspection_0_20260313111800.mp4', '2026-03-13 11:07:00', '2026-03-13 11:18:00'),
+  (9, '2', '0', 'admin', '1', 'results/20260312091900', 'results/20260312091900/videos/inspection_2_20260312091900.mp4', '2026-03-12 09:07:00', '2026-03-12 09:19:00'),
+  (10, '1', '1', 'admin', '0', 'results/20260311102000', 'results/20260311102000/videos/inspection_1_20260311102000.mp4', '2026-03-11 10:07:00', '2026-03-11 10:20:00')
 ON DUPLICATE KEY UPDATE
   mode = VALUES(mode),
   environment = VALUES(environment),
@@ -33,14 +33,14 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO inspection_anomaly_image (id, inspection_id, image_path, anomaly_type, remark, captured_at)
 VALUES
-  (1, 1, 'results/20260320091501/images/stop_0001_PL.jpg', 'PL', 'stop_0001_PL.jpg', '2026-03-20 09:13:00'),
-  (2, 1, 'results/20260320091501/images/stop_0002_PL.jpg', 'PL', 'stop_0002_PL.jpg', '2026-03-20 09:13:30'),
-  (3, 2, 'results/20260319141002/images/stop_0001_RG.jpg', 'RG', 'stop_0001_RG.jpg', '2026-03-19 14:06:00'),
-  (4, 3, 'results/20260318102403/images/stop_0001_BX_ZAW.jpg', 'BX+ZAW', 'stop_0001_BX_ZAW.jpg', '2026-03-18 10:21:00'),
-  (5, 5, 'results/20260316113605/images/stop_0001_PL_RG.jpg', 'PL+RG', 'stop_0001_PL_RG.jpg', '2026-03-16 11:34:00'),
-  (6, 6, 'results/20260315131206/images/stop_0001_SG.jpg', 'SG', 'stop_0001_SG.jpg', '2026-03-15 13:10:00'),
-  (7, 7, 'results/20260314095307/images/stop_0001_ZAW.jpg', 'ZAW', 'stop_0001_ZAW.jpg', '2026-03-14 09:50:00'),
-  (8, 9, 'results/20260312105909/images/stop_0001_BX.jpg', 'BX', 'stop_0001_BX.jpg', '2026-03-12 10:57:00')
+  (1, 1, 'results/20260320101100/images/stop_0001_PL.png', 'PL', 'stop_0001_PL.png', '2026-03-20 10:09:00'),
+  (2, 1, 'results/20260320101100/images/stop_0002_RG.png', 'RG', 'stop_0002_RG.png', '2026-03-20 10:10:00'),
+  (3, 2, 'results/20260319111200/images/stop_0001_RG.png', 'RG', 'stop_0001_RG.png', '2026-03-19 11:11:00'),
+  (4, 3, 'results/20260318091300/images/stop_0001_BX.png', 'BX', 'stop_0001_BX.png', '2026-03-18 09:12:00'),
+  (5, 5, 'results/20260316111500/images/stop_0001_ZAW.png', 'ZAW', 'stop_0001_ZAW.png', '2026-03-16 11:14:00'),
+  (6, 6, 'results/20260315091600/images/stop_0001_PL.png', 'PL', 'stop_0001_PL.png', '2026-03-15 09:15:00'),
+  (7, 7, 'results/20260314101700/images/stop_0001_RG.png', 'RG', 'stop_0001_RG.png', '2026-03-14 10:16:00'),
+  (8, 9, 'results/20260312091900/images/stop_0001_SG.png', 'SG', 'stop_0001_SG.png', '2026-03-12 09:18:00')
 ON DUPLICATE KEY UPDATE
   inspection_id = VALUES(inspection_id),
   image_path = VALUES(image_path),
@@ -50,8 +50,9 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO inspection_point_file (id, inspection_id, point_path, captured_at)
 VALUES
-  (1, 3, 'results/20260318102403/points/assembled_cloud_01.pcd', '2026-03-18 10:23:00'),
-  (2, 6, 'results/20260315131206/points/assembled_cloud_02.pcd', '2026-03-15 13:11:00')
+  (1, 3, 'results/20260318091300/points/assembled_cloud_01.pcd', '2026-03-18 09:12:15'),
+  (2, 6, 'results/20260315091600/points/assembled_cloud_01.pcd', '2026-03-15 09:14:30'),
+  (3, 9, 'results/20260312091900/points/assembled_cloud_01.pcd', '2026-03-12 09:16:45')
 ON DUPLICATE KEY UPDATE
   inspection_id = VALUES(inspection_id),
   point_path = VALUES(point_path),

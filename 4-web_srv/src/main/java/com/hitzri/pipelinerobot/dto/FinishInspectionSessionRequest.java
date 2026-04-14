@@ -3,6 +3,7 @@ package com.hitzri.pipelinerobot.dto;
 public class FinishInspectionSessionRequest {
 
     private boolean copyDefectImages;
+    private boolean copyFittedResult;
     private String pointCloudFileName;
     private String pointCloudPcdContent;
 
@@ -12,6 +13,14 @@ public class FinishInspectionSessionRequest {
 
     public void setCopyDefectImages(boolean copyDefectImages) {
         this.copyDefectImages = copyDefectImages;
+    }
+
+    public boolean isCopyFittedResult() {
+        return copyFittedResult;
+    }
+
+    public void setCopyFittedResult(boolean copyFittedResult) {
+        this.copyFittedResult = copyFittedResult;
     }
 
     public String getPointCloudFileName() {
