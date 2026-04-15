@@ -3,7 +3,11 @@
     <div class="panel-title">监测分析</div>
     <div class="panel-body analysis-body">
       <div class="analysis-visual">
-        <img :src="statusImage" :alt="statusAlt" class="analysis-image">
+        <img
+          :src="statusImage"
+          :alt="statusAlt"
+          :class="['analysis-image', imageEffectClass]"
+        >
       </div>
 
       <div
@@ -44,6 +48,16 @@ const shouldScroll = ref(false)
 let resizeObserver = null
 
 const statusImage = computed(() => resolveImageAsset(analysisImageKey.value))
+const imageEffectClass = computed(() => {
+  if (analysisStatus.value === ANALYSIS_STATUS.CHECKING) {
+    return 'is-checking'
+  }
+  if (analysisStatus.value === ANALYSIS_STATUS.WARNING) {
+    return 'is-warning'
+  }
+  return 'is-ok'
+})
+
 const statusAlt = computed(() => {
   if (analysisStatus.value === ANALYSIS_STATUS.CHECKING) {
     return '管道状态检测中'
@@ -134,6 +148,20 @@ onBeforeUnmount(() => {
   max-width: min(100%, 390px);
   max-height: 260px;
   object-fit: contain;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.analysis-image.is-ok {
+  animation: none;
+}
+
+.analysis-image.is-checking {
+  animation: analysis-breathe-slow 3.0s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.analysis-image.is-warning {
+  animation: analysis-breathe-fast 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .analysis-message-viewport {
@@ -170,6 +198,28 @@ onBeforeUnmount(() => {
 
   to {
     transform: translateY(calc(-50% - 5px));
+  }
+}
+
+@keyframes analysis-breathe-slow {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes analysis-breathe-fast {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.1);
   }
 }
 
