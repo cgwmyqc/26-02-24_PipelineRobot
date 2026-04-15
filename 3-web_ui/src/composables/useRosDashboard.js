@@ -258,6 +258,19 @@ export function useRosDashboard() {
     }
   }
 
+  function buildAutoInspectionPayload() {
+    const fittedResultData = store.buildAutoInspectionFittedResult()
+    const fittedResultJsonContent = JSON.stringify(fittedResultData, null, 2)
+    return {
+      fittedResultData,
+      payload: {
+        copyDefectImages: false,
+        fittedResultJsonContent,
+        ...getCurrentPointCloudPayload('1')
+      }
+    }
+  }
+
   function publishManualMode(isManual) {
     rosService.publish(appConfig.topics.manualModeCommand, {
       data: isManual
@@ -329,11 +342,9 @@ export function useRosDashboard() {
     resetAutoFlowState()
 
     try {
-      const { data } = await finishInspectionSession(sessionId, {
-        copyDefectImages: false,
-        ...getCurrentPointCloudPayload('1')
-      })
-      store.completeAutoAssemblyDisplay()
+      const { fittedResultData, payload } = buildAutoInspectionPayload()
+      const { data } = await finishInspectionSession(sessionId, payload)
+      store.completeAutoAssemblyDisplay(fittedResultData)
       try {
         await store.syncAnalysisStatusFromInspection(data?.inspectionId)
       } catch (error) {

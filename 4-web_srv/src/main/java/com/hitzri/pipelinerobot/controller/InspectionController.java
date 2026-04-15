@@ -81,12 +81,14 @@ public class InspectionController {
     ) throws IOException, InterruptedException {
         boolean copyDefectImages = request != null && request.isCopyDefectImages();
         boolean copyFittedResult = request != null && request.isCopyFittedResult();
+        String fittedResultJsonContent = request != null ? request.getFittedResultJsonContent() : null;
         String pointCloudFileName = request != null ? request.getPointCloudFileName() : null;
         String pointCloudPcdContent = request != null ? request.getPointCloudPcdContent() : null;
         Long inspectionId = inspectionSessionService.finishSession(
             sessionId,
             copyDefectImages,
             copyFittedResult,
+            fittedResultJsonContent,
             pointCloudFileName,
             pointCloudPcdContent
         );

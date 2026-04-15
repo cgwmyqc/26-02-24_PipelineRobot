@@ -4,6 +4,7 @@ public class FinishInspectionSessionRequest {
 
     private boolean copyDefectImages;
     private boolean copyFittedResult;
+    private String fittedResultJsonContent;
     private String pointCloudFileName;
     private String pointCloudPcdContent;
 
@@ -21,6 +22,14 @@ public class FinishInspectionSessionRequest {
 
     public void setCopyFittedResult(boolean copyFittedResult) {
         this.copyFittedResult = copyFittedResult;
+    }
+
+    public String getFittedResultJsonContent() {
+        return fittedResultJsonContent;
+    }
+
+    public void setFittedResultJsonContent(String fittedResultJsonContent) {
+        this.fittedResultJsonContent = fittedResultJsonContent;
     }
 
     public String getPointCloudFileName() {

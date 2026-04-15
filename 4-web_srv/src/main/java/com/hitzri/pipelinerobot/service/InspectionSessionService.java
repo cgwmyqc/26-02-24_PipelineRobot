@@ -131,6 +131,7 @@ public class InspectionSessionService {
         String sessionId,
         boolean copyDefectImages,
         boolean copyFittedResult,
+        String fittedResultJsonContent,
         String pointCloudFileName,
         String pointCloudPcdContent
     ) throws IOException, InterruptedException {
@@ -192,7 +193,25 @@ public class InspectionSessionService {
         }
 
         savePointCloudFile(record.getId(), pointsDir, pointCloudFileName, pointCloudPcdContent, now);
-        record.setFittedResultPath(copyFittedResult ? copyFittedResultToResult(pointsDir) : null);
+        log.info(
+            "Finishing inspection session: sessionId={}, mode={}, hasFittedResultJson={}, copyFittedResult={}, pointsDir={}",
+            sessionId,
+            context.mode,
+            StringUtils.hasText(fittedResultJsonContent),
+            copyFittedResult,
+            pointsDir
+        );
+        if (StringUtils.hasText(fittedResultJsonContent)) {
+            record.setFittedResultPath(saveFittedResultFile(pointsDir, fittedResultJsonContent));
+        } else {
+            record.setFittedResultPath(copyFittedResult ? copyFittedResultToResult(pointsDir) : null);
+        }
+        log.info(
+            "Inspection fitted result persisted: sessionId={}, inspectionId={}, fittedResultPath={}",
+            sessionId,
+            record.getId(),
+            record.getFittedResultPath()
+        );
 
         record.setResultSummary(calculateResultSummary(anomalyTypes));
         inspectionRecordMapper.updateById(record);
@@ -302,6 +321,19 @@ public class InspectionSessionService {
 
         Path targetPath = pointsDir.resolve("defects_global.json").normalize();
         Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        return toRelativeStoragePath(targetPath);
+    }
+
+    private String saveFittedResultFile(Path pointsDir, String fittedResultJsonContent) throws IOException {
+        String normalizedContent = String.valueOf(fittedResultJsonContent == null ? "" : fittedResultJsonContent).trim();
+        if (!StringUtils.hasText(normalizedContent)) {
+            log.warn("Skip saving fitted result file because content is empty: pointsDir={}", pointsDir);
+            return null;
+        }
+
+        Path targetPath = pointsDir.resolve("defects_global.json").normalize();
+        Files.writeString(targetPath, normalizedContent + System.lineSeparator(), StandardCharsets.UTF_8);
+        log.info("Saved fitted result file: path={}", targetPath);
         return toRelativeStoragePath(targetPath);
     }
 

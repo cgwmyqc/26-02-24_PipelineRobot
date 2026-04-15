@@ -78,6 +78,7 @@
             <PointCloudScene
               :mode="pointCloudSceneMode"
               :points="pointCloudPoints"
+              :segment-labels="pointCloudSegmentLabels"
               :fitted-data="fittedPipeData"
             />
             <div v-if="fitViewEnabled && fittedPipeLoading" class="point-cloud-overlay">
@@ -147,6 +148,7 @@ const {
   detailRecord,
   exportingId,
   pointCloudPoints,
+  pointCloudSegmentLabels,
   testModeEnabled,
   testState,
   triggerCount,

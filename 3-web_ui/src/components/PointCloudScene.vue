@@ -16,6 +16,10 @@ const props = defineProps({
     type: String,
     default: 'raw'
   },
+  segmentLabels: {
+    type: Array,
+    default: () => []
+  },
   fittedData: {
     type: Object,
     default: null
@@ -36,6 +40,9 @@ let pointMaterial
 let gridHelper
 let axesHelper
 let fitGroup
+let rawLabelGroup
+let activeRawLabel = null
+let exitingRawLabel = null
 let animatedDefects = []
 let hasFramedScene = false
 
@@ -50,6 +57,7 @@ const FITTED_COLOR_MAP = Object.freeze({
 const FITTED_WALL_THICKNESS = 0.026
 const LABEL_SCALE = 0.3
 const Z_AXIS_ROTATION_OFFSET = Math.PI
+const RAW_LABEL_FADE_DURATION_MS = 260
 
 function getContainerSize() {
   const width = container.value?.clientWidth || 0
@@ -158,6 +166,129 @@ function updateRawPoints() {
   }
 }
 
+function estimateRawLabelRadius(label) {
+  const fallbackRadius = Math.max(Number(label?.diameter || 0) / 2, PIPE_RADIUS_METERS)
+  const centerZ = Number(label?.centerZ)
+  if (!Array.isArray(props.points) || !props.points.length || !Number.isFinite(centerZ)) {
+    return fallbackRadius
+  }
+
+  const zWindow = 0.24
+  let maxRadius = 0
+  let matchCount = 0
+
+  props.points.forEach((point) => {
+    if (!point || Math.abs(Number(point.z) - centerZ) > zWindow) {
+      return
+    }
+    const radius = Math.hypot(Number(point.x), Number(point.y))
+    if (Number.isFinite(radius)) {
+      maxRadius = Math.max(maxRadius, radius)
+      matchCount += 1
+    }
+  })
+
+  if (!matchCount) {
+    return fallbackRadius
+  }
+
+  return Math.max(maxRadius, fallbackRadius * 0.9)
+}
+
+function getRawSegmentLabelPosition(label) {
+  const radius = estimateRawLabelRadius(label)
+  const angle = -Math.PI / 5
+  const radialScale = 1.18
+  const x = Math.cos(angle) * radius * radialScale
+  const y = Math.sin(angle) * radius * radialScale + radius * 0.18
+  const z = Number(label?.centerZ || 0)
+  return new THREE.Vector3(x, y, z)
+}
+
+function disposeRawLabelEntry(entry) {
+  if (!entry) {
+    return
+  }
+
+  if (entry.sprite?.parent) {
+    entry.sprite.parent.remove(entry.sprite)
+  }
+  clearObject3D(entry.sprite)
+}
+
+function clearRawLabelEntries() {
+  disposeRawLabelEntry(activeRawLabel)
+  disposeRawLabelEntry(exitingRawLabel)
+  activeRawLabel = null
+  exitingRawLabel = null
+}
+
+function createRawLabelEntry(label) {
+  const text = String(label?.text || '').trim()
+  if (!text) {
+    return null
+  }
+
+  const sprite = createTextSprite(text, {
+    color: '#F7FFFB',
+    background: 'rgba(8, 26, 41, 0.84)',
+    fontSize: 20,
+    renderOrder: 17
+  })
+  sprite.position.copy(getRawSegmentLabelPosition(label))
+  sprite.material.opacity = 1
+  rawLabelGroup.add(sprite)
+
+  return {
+    id: String(label?.id || ''),
+    sprite
+  }
+}
+
+function transitionRawSegmentLabel(nextLabel) {
+  if (!rawLabelGroup) {
+    return
+  }
+
+  rawLabelGroup.visible = props.mode === 'raw'
+
+  if (!nextLabel) {
+    disposeRawLabelEntry(activeRawLabel)
+    activeRawLabel = null
+    return
+  }
+
+  const nextId = String(nextLabel?.id || '')
+  if (activeRawLabel?.id === nextId) {
+    activeRawLabel.sprite.position.copy(getRawSegmentLabelPosition(nextLabel))
+    return
+  }
+
+  disposeRawLabelEntry(exitingRawLabel)
+  exitingRawLabel = null
+
+  if (activeRawLabel) {
+    exitingRawLabel = {
+      ...activeRawLabel,
+      fadeStartedAt: performance.now()
+    }
+  }
+
+  activeRawLabel = createRawLabelEntry(nextLabel)
+}
+
+function renderRawSegmentLabels() {
+  if (!rawLabelGroup) {
+    return
+  }
+
+  rawLabelGroup.visible = props.mode === 'raw'
+  const nextLabel = Array.isArray(props.segmentLabels) && props.segmentLabels.length
+    ? props.segmentLabels[props.segmentLabels.length - 1]
+    : null
+  transitionRawSegmentLabel(nextLabel)
+}
+
 function createScene() {
   scene = new THREE.Scene()
 
@@ -208,6 +339,10 @@ function createScene() {
   fitGroup = new THREE.Group()
   fitGroup.visible = false
   scene.add(fitGroup)
+
+  rawLabelGroup = new THREE.Group()
+  rawLabelGroup.visible = true
+  scene.add(rawLabelGroup)
 
   updateSceneContent()
 }
@@ -267,6 +402,7 @@ function updateRendererSize() {
 
 function animate() {
   frameId = requestAnimationFrame(animate)
+  const now = performance.now()
   const elapsed = performance.now() * 0.001
   animatedDefects.forEach((item, index) => {
     const phase = elapsed * 2.15 + index * 0.85
@@ -288,6 +424,17 @@ function animate() {
       item.labelSprite.material.opacity = item.baseLabelOpacity + pulse * item.labelOpacityRange
     }
   })
+
+  if (exitingRawLabel?.sprite?.material) {
+    const fadeElapsed = Math.max(0, now - Number(exitingRawLabel.fadeStartedAt || now))
+    const fadeProgress = Math.min(1, fadeElapsed / RAW_LABEL_FADE_DURATION_MS)
+    exitingRawLabel.sprite.material.opacity = 1 - fadeProgress
+    if (fadeProgress >= 1) {
+      disposeRawLabelEntry(exitingRawLabel)
+      exitingRawLabel = null
+    }
+  }
+
   controls?.update()
   renderer?.render(scene, camera)
 }
@@ -393,7 +540,7 @@ function createTextSprite(text, options = {}) {
 }
 
 function addAxisMeasurementLabels(placement) {
-  const startLabel = createTextSprite(`${placement.zMin.toFixed(1)}m`, {
+  const startLabel = createTextSprite(`${placement.zMin.toFixed(3)}m`, {
     color: '#DFF7FF',
     background: 'rgba(8, 26, 41, 0.82)',
     renderOrder: 18
@@ -406,7 +553,7 @@ function addAxisMeasurementLabels(placement) {
   )
   fitGroup.add(startLabel)
 
-  const endLabel = createTextSprite(`${placement.zMax.toFixed(1)}m`, {
+  const endLabel = createTextSprite(`${placement.zMax.toFixed(3)}m`, {
     color: '#DFF7FF',
     background: 'rgba(8, 26, 41, 0.82)',
     renderOrder: 18
@@ -437,7 +584,7 @@ function getDiameterLabelPosition(placement, isStart) {
 }
 
 function addDiameterLabels(placement) {
-  const diameterText = `${(placement.radius * 2).toFixed(1)}m`
+  const diameterText = `${(placement.radius * 2).toFixed(3)}m`
   const labelOptions = {
     color: '#DFF7FF',
     background: 'rgba(8, 26, 41, 0.82)',
@@ -702,7 +849,7 @@ function renderFittedScene() {
 }
 
 function updateSceneContent() {
-  if (!scene || !pointCloud || !fitGroup) {
+  if (!scene || !pointCloud || !fitGroup || !rawLabelGroup) {
     return
   }
 
@@ -713,6 +860,9 @@ function updateSceneContent() {
   axesHelper.scale.setScalar(fittedMode ? 1.15 : 1.0)
 
   if (fittedMode) {
+    clearRawLabelEntries()
+    clearObject3D(rawLabelGroup)
+    rawLabelGroup.visible = false
     renderFittedScene()
     return
   }
@@ -720,6 +870,7 @@ function updateSceneContent() {
   clearObject3D(fitGroup)
   fitGroup.visible = false
   updateRawPoints()
+  renderRawSegmentLabels()
 }
 
 function initScene() {
@@ -749,6 +900,8 @@ function disposeScene() {
   resizeObserver?.disconnect()
   controls?.dispose()
   clearObject3D(fitGroup)
+  clearRawLabelEntries()
+  clearObject3D(rawLabelGroup)
   resetAnimatedDefects()
   pointGeometry?.dispose()
   pointMaterial?.dispose()
@@ -767,6 +920,7 @@ function disposeScene() {
   gridHelper = null
   axesHelper = null
   fitGroup = null
+  rawLabelGroup = null
   hasFramedScene = false
 }
 
@@ -780,9 +934,22 @@ watch(
 )
 
 watch(
+  () => props.segmentLabels,
+  () => {
+    if (props.mode === 'raw') {
+      renderRawSegmentLabels()
+    }
+  },
+  { deep: true }
+)
+
+watch(
   () => props.mode,
   () => {
     resetFraming()
+    if (props.mode !== 'raw') {
+      clearRawLabelEntries()
+    }
     updateSceneContent()
   }
 )
