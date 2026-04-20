@@ -2,10 +2,10 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-brand">
-        <div class="brand-badge">UNI</div>
+        <img class="brand-badge" :src="loginBrand" alt="品牌标识" />
         <div>
           <p class="eyebrow">Pipeline Robot Digital Twin</p>
-          <h1>下水道巡检机器人监测平台</h1>
+          <h1>低干扰排水管道缺陷与状态自动检测装置智能监测平台</h1>
         </div>
       </div>
 
@@ -35,6 +35,7 @@ import { reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import loginBrand from '../assets/images/login_brand.png'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -68,7 +69,7 @@ async function handleLogin() {
 }
 
 .login-card {
-  width: min(440px, 100%);
+  width: min(500px, 100%);
   padding: 36px;
   border: 1px solid rgba(103, 212, 255, 0.18);
   background:
@@ -86,19 +87,14 @@ async function handleLogin() {
 }
 
 .brand-badge {
-  display: grid;
-  place-items: center;
-  width: 76px;
-  height: 76px;
-  background: linear-gradient(135deg, rgba(89, 233, 245, 0.92), rgba(117, 240, 194, 0.78));
-  color: #07202e;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: 2px;
+  display: block;
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
 }
 
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0 0 5px;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -107,7 +103,7 @@ async function handleLogin() {
 
 h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 25px;
   line-height: 1.3;
 }
 
