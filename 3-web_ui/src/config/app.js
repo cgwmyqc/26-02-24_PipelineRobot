@@ -39,6 +39,10 @@ export const appConfig = {
       name: '/fixed_controller/travel_m',
       messageType: 'std_msgs/msg/Float32'
     },
+    laserDistances: {
+      name: '/fixed_controller/laser_distances_mm',
+      messageType: 'std_msgs/msg/Int32MultiArray'
+    },
     motionReached: {
       name: '/fixed_controller/motion_reached',
       messageType: 'std_msgs/msg/Bool'

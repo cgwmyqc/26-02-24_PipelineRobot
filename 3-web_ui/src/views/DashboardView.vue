@@ -20,6 +20,9 @@
               :motor-enabled="motorEnabled"
               :motor-run-state="motorRunState"
               :motion-reached="motionReached"
+              :laser-distance1-mm="laserDistance1Mm"
+              :laser-distance2-mm="laserDistance2Mm"
+              :laser-distance3-mm="laserDistance3Mm"
               :set-patrol-mode="setPatrolMode"
               :publish-move-command="publishMoveCommand"
               :start-auto-inspection="startAutoInspection"
@@ -138,6 +141,9 @@ const {
   motorEnabled,
   motorRunState,
   motionReached,
+  laserDistance1Mm,
+  laserDistance2Mm,
+  laserDistance3Mm,
   rosConnected,
   historyList,
   historyLoading,

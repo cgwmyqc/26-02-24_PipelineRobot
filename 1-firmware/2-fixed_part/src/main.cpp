@@ -13,6 +13,7 @@
 #include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/int32_multi_array.h>
 #include <std_msgs/msg/string.h>
 
 // ============================================================
@@ -42,6 +43,19 @@
       Serial.print(": ");                  \
       Serial.println((int)temp_rc);        \
     }                                      \
+  }
+
+#define RCCHECK_RETURN_FALSE(fn)                   \
+  {                                                \
+    rcl_ret_t temp_rc = fn;                        \
+    if ((temp_rc != RCL_RET_OK))                   \
+    {                                              \
+      Serial.print("Create error at line ");       \
+      Serial.print(__LINE__);                      \
+      Serial.print(": ");                          \
+      Serial.println((int)temp_rc);                \
+      return false;                                \
+    }                                              \
   }
 
 // ============================================================
@@ -96,6 +110,20 @@ const uint16_t client_port = 8890;
 #define ENCODER_A_PIN  45
 #define ENCODER_B_PIN  46
 #define ENCODER_Z_PIN  47
+
+// ============================================================
+// RS485 激光测距传感器定义
+// ============================================================
+#define RS485_RX_PIN 42
+#define RS485_TX_PIN 41
+
+constexpr uint8_t LASER_SENSOR_COUNT = 3;
+static const uint8_t LASER_SENSOR_ADDRS[LASER_SENSOR_COUNT] = {0x01, 0x02, 0x03};
+constexpr uint16_t LASER_CONFIDENCE_THRESHOLD = 80;
+constexpr uint32_t LASER_SENSOR_INTERVAL_MS = 40;
+constexpr uint32_t LASER_RESPONSE_TIMEOUT_MS = 80;
+constexpr int32_t LASER_DISTANCE_INVALID_MM = -1;
+static const char *LASER_DISTANCES_TOPIC = "/fixed_controller/laser_distances_mm";
 
 // ============================================================
 // 编码器与行程参数
@@ -194,6 +222,14 @@ typedef struct
   size_t size;
 } OtaRequest_t;
 
+typedef struct
+{
+  int32_t distance_mm[LASER_SENSOR_COUNT];
+  uint16_t confidence[LASER_SENSOR_COUNT];
+  bool valid[LASER_SENSOR_COUNT];
+  uint32_t update_ms[LASER_SENSOR_COUNT];
+} LaserSensorState_t;
+
 // ============================================================
 // 控制器状态快照
 // ============================================================
@@ -231,6 +267,14 @@ ControllerState_t g_ctrl_state = {
 };
 
 SemaphoreHandle_t ctrl_state_mutex = NULL;
+SemaphoreHandle_t laser_state_mutex = NULL;
+
+HardwareSerial RS485Serial(1);
+LaserSensorState_t g_laser_state = {
+    {LASER_DISTANCE_INVALID_MM, LASER_DISTANCE_INVALID_MM, LASER_DISTANCE_INVALID_MM},
+    {0, 0, 0},
+    {false, false, false},
+    {0, 0, 0}};
 
 // ------------------------------------------------------------
 // 远程控制输入
@@ -300,6 +344,7 @@ rcl_publisher_t motion_reached_pub;
 rcl_publisher_t auto_return_home_done_pub;
 rcl_publisher_t encoder_count_pub;
 rcl_publisher_t travel_m_pub;
+rcl_publisher_t laser_distances_pub;
 rcl_publisher_t ota_status_pub;
 rcl_publisher_t ota_progress_pub;
 
@@ -325,9 +370,14 @@ std_msgs__msg__Bool motion_reached_msg;
 std_msgs__msg__Bool auto_return_home_done_msg;
 std_msgs__msg__Int32 encoder_count_msg;
 std_msgs__msg__Float32 travel_m_msg;
+std_msgs__msg__Int32MultiArray laser_distances_msg;
 std_msgs__msg__Int32 ota_progress_msg;
 std_msgs__msg__String ota_command_msg;
 std_msgs__msg__String ota_status_msg;
+int32_t laser_distances_data[LASER_SENSOR_COUNT] = {
+    LASER_DISTANCE_INVALID_MM,
+    LASER_DISTANCE_INVALID_MM,
+    LASER_DISTANCE_INVALID_MM};
 
 // 订阅消息缓冲
 std_msgs__msg__Bool start_auto_msg;
@@ -355,6 +405,7 @@ bool ping_agent();
 bool check_agent_alive();
 
 void io_control_task(void *parameter);
+void laser_sensor_task(void *parameter);
 void micro_ros_task(void *parameter);
 void ota_worker_task(void *parameter);
 
@@ -374,6 +425,12 @@ void ota_command_callback(const void *msgin);
 
 bool debounce_update(DebounceInput_t *db, bool raw, uint32_t now_ms);
 bool debounce_rising_edge(DebounceInput_t *db);
+void init_laser_sensor_bus();
+uint16_t modbus_crc16(const uint8_t *data, size_t len);
+void laser_build_read_command(uint8_t addr, uint8_t *cmd);
+void laser_clear_uart_buffer();
+bool laser_read_sensor(uint8_t addr, int32_t *distance_mm, uint16_t *confidence);
+void laser_snapshot_state(LaserSensorState_t *out_state);
 bool ota_download_and_apply();
 void ota_set_runtime_state(const char *job_id, const char *phase, const char *message, int32_t progress);
 void ota_snapshot_runtime_state(char *job_id, size_t job_id_size, char *phase, size_t phase_size, char *message, size_t message_size, int32_t *progress);
@@ -1391,6 +1448,161 @@ bool check_agent_alive()
 }
 
 // ============================================================
+// RS485 激光测距传感器
+// ============================================================
+void init_laser_sensor_bus()
+{
+  RS485Serial.begin(38400, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  laser_clear_uart_buffer();
+
+  Serial.println("[LASER] RS485 init done");
+  Serial.print("[LASER] UART1 RX=");
+  Serial.print(RS485_RX_PIN);
+  Serial.print(" TX=");
+  Serial.println(RS485_TX_PIN);
+}
+
+uint16_t modbus_crc16(const uint8_t *data, size_t len)
+{
+  uint16_t crc = 0xFFFF;
+
+  for (size_t i = 0; i < len; i++)
+  {
+    crc ^= data[i];
+
+    for (uint8_t j = 0; j < 8; j++)
+    {
+      if ((crc & 0x0001) != 0)
+      {
+        crc >>= 1;
+        crc ^= 0xA001;
+      }
+      else
+      {
+        crc >>= 1;
+      }
+    }
+  }
+
+  return crc;
+}
+
+void laser_build_read_command(uint8_t addr, uint8_t *cmd)
+{
+  cmd[0] = addr;
+  cmd[1] = 0x03;
+  cmd[2] = 0x00;
+  cmd[3] = 0x00;
+  cmd[4] = 0x00;
+  cmd[5] = 0x02;
+
+  uint16_t crc = modbus_crc16(cmd, 6);
+  cmd[6] = crc & 0xFF;
+  cmd[7] = (crc >> 8) & 0xFF;
+}
+
+void laser_clear_uart_buffer()
+{
+  while (RS485Serial.available())
+  {
+    RS485Serial.read();
+  }
+}
+
+bool laser_read_sensor(uint8_t addr, int32_t *distance_mm, uint16_t *confidence)
+{
+  if (distance_mm == NULL || confidence == NULL)
+  {
+    return false;
+  }
+
+  uint8_t tx_cmd[8];
+  uint8_t rx_buf[64];
+  size_t rx_len = 0;
+
+  *distance_mm = LASER_DISTANCE_INVALID_MM;
+  *confidence = 0;
+
+  laser_clear_uart_buffer();
+  laser_build_read_command(addr, tx_cmd);
+  RS485Serial.write(tx_cmd, sizeof(tx_cmd));
+  RS485Serial.flush();
+
+  uint32_t start_ms = millis();
+  while (millis() - start_ms < LASER_RESPONSE_TIMEOUT_MS)
+  {
+    while (RS485Serial.available())
+    {
+      uint8_t b = RS485Serial.read();
+      if (rx_len < sizeof(rx_buf))
+      {
+        rx_buf[rx_len++] = b;
+      }
+    }
+
+    if (rx_len >= 9)
+    {
+      break;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(1));
+  }
+
+  if (rx_len < 9)
+  {
+    return false;
+  }
+
+  if (rx_buf[0] != addr || rx_buf[1] != 0x03 || rx_buf[2] != 0x04)
+  {
+    return false;
+  }
+
+  uint16_t crc_calc = modbus_crc16(rx_buf, 7);
+  uint16_t crc_recv = ((uint16_t)rx_buf[8] << 8) | rx_buf[7];
+  if (crc_calc != crc_recv)
+  {
+    return false;
+  }
+
+  uint16_t parsed_distance = ((uint16_t)rx_buf[3] << 8) | rx_buf[4];
+  uint16_t parsed_confidence = ((uint16_t)rx_buf[5] << 8) | rx_buf[6];
+  if (parsed_confidence < LASER_CONFIDENCE_THRESHOLD)
+  {
+    *confidence = parsed_confidence;
+    return false;
+  }
+
+  *distance_mm = (int32_t)parsed_distance;
+  *confidence = parsed_confidence;
+  return true;
+}
+
+void laser_snapshot_state(LaserSensorState_t *out_state)
+{
+  if (out_state == NULL)
+  {
+    return;
+  }
+
+  if (laser_state_mutex != NULL && xSemaphoreTake(laser_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+  {
+    *out_state = g_laser_state;
+    xSemaphoreGive(laser_state_mutex);
+  }
+  else
+  {
+    for (uint8_t i = 0; i < LASER_SENSOR_COUNT; i++)
+    {
+      out_state->distance_mm[i] = LASER_DISTANCE_INVALID_MM;
+      out_state->confidence[i] = 0;
+      out_state->valid[i] = false;
+      out_state->update_ms[i] = 0;
+    }
+  }
+}
+
+// ============================================================
 // 创建 micro-ROS 节点、发布器和订阅器
 // ============================================================
 bool create_microros_entities()
@@ -1412,6 +1624,7 @@ bool create_microros_entities()
   auto_return_home_done_pub = rcl_get_zero_initialized_publisher();
   encoder_count_pub = rcl_get_zero_initialized_publisher();
   travel_m_pub = rcl_get_zero_initialized_publisher();
+  laser_distances_pub = rcl_get_zero_initialized_publisher();
   ota_status_pub = rcl_get_zero_initialized_publisher();
   ota_progress_pub = rcl_get_zero_initialized_publisher();
 
@@ -1428,74 +1641,87 @@ bool create_microros_entities()
   ota_status_msg.data.data = g_ota_status_buffer;
   ota_status_msg.data.size = 0;
   ota_status_msg.data.capacity = sizeof(g_ota_status_buffer);
+  laser_distances_msg.layout.dim.data = NULL;
+  laser_distances_msg.layout.dim.size = 0;
+  laser_distances_msg.layout.dim.capacity = 0;
+  laser_distances_msg.layout.data_offset = 0;
+  laser_distances_msg.data.data = laser_distances_data;
+  laser_distances_msg.data.size = LASER_SENSOR_COUNT;
+  laser_distances_msg.data.capacity = LASER_SENSOR_COUNT;
 
-  RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
-  RCCHECK(rclc_node_init_default(&node, "esp32_fixed_controller_node", "", &support));
+  RCCHECK_RETURN_FALSE(rclc_support_init(&support, 0, NULL, &allocator));
+  RCCHECK_RETURN_FALSE(rclc_node_init_default(&node, "esp32_fixed_controller_node", "", &support));
 
   // ----------------------------------------------------------
   // 发布器
   // ----------------------------------------------------------
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &motor_enable_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/motor_enable"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &control_mode_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_mode"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &motor_state_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
       "/fixed_controller/motor_run_state"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &btn_forward_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_forward_button"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &btn_reverse_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_reverse_button"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &motion_reached_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/motion_reached"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &auto_return_home_done_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/auto_return_home_done"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &encoder_count_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
       "/fixed_controller/encoder_count"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &travel_m_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
       "/fixed_controller/travel_m"));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
+      &laser_distances_pub,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
+      LASER_DISTANCES_TOPIC));
+
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &ota_status_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
       OTA_STATUS_TOPIC));
 
-  RCCHECK(rclc_publisher_init_default(
+  RCCHECK_RETURN_FALSE(rclc_publisher_init_default(
       &ota_progress_pub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
@@ -1504,37 +1730,37 @@ bool create_microros_entities()
   // ----------------------------------------------------------
   // 订阅器
   // ----------------------------------------------------------
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &start_auto_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/start_auto"));
 
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &detect_done_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/detect_done"));
 
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &set_manual_mode_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/set_manual_mode"));
 
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &manual_forward_cmd_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_forward_cmd"));
 
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &manual_reverse_cmd_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
       "/fixed_controller/manual_reverse_cmd"));
 
-  RCCHECK(rclc_subscription_init_default(
+  RCCHECK_RETURN_FALSE(rclc_subscription_init_default(
       &ota_command_sub,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
@@ -1543,44 +1769,44 @@ bool create_microros_entities()
   // ----------------------------------------------------------
   // executor
   // ----------------------------------------------------------
-  RCCHECK(rclc_executor_init(&executor, &support.context, 6, &allocator));
+  RCCHECK_RETURN_FALSE(rclc_executor_init(&executor, &support.context, 6, &allocator));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &start_auto_sub,
       &start_auto_msg,
       &start_auto_callback,
       ON_NEW_DATA));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &detect_done_sub,
       &detect_done_msg,
       &detect_done_callback,
       ON_NEW_DATA));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &set_manual_mode_sub,
       &set_manual_mode_msg,
       &set_manual_mode_callback,
       ON_NEW_DATA));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &manual_forward_cmd_sub,
       &manual_forward_cmd_msg,
       &manual_forward_cmd_callback,
       ON_NEW_DATA));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &manual_reverse_cmd_sub,
       &manual_reverse_cmd_msg,
       &manual_reverse_cmd_callback,
       ON_NEW_DATA));
 
-  RCCHECK(rclc_executor_add_subscription(
+  RCCHECK_RETURN_FALSE(rclc_executor_add_subscription(
       &executor,
       &ota_command_sub,
       &ota_command_msg,
@@ -1634,6 +1860,12 @@ void destroy_microros_entities()
   {
     RCSOFTCHECK(rcl_publisher_fini(&travel_m_pub, &node));
     travel_m_pub = rcl_get_zero_initialized_publisher();
+  }
+
+  if (laser_distances_pub.impl != NULL)
+  {
+    RCSOFTCHECK(rcl_publisher_fini(&laser_distances_pub, &node));
+    laser_distances_pub = rcl_get_zero_initialized_publisher();
   }
 
   if (ota_status_pub.impl != NULL)
@@ -1925,6 +2157,39 @@ void io_control_task(void *parameter)
   }
 }
 
+void laser_sensor_task(void *parameter)
+{
+  (void)parameter;
+
+  init_laser_sensor_bus();
+
+  for (;;)
+  {
+    for (uint8_t i = 0; i < LASER_SENSOR_COUNT; i++)
+    {
+      int32_t distance_mm = LASER_DISTANCE_INVALID_MM;
+      uint16_t confidence = 0;
+      bool valid = laser_read_sensor(LASER_SENSOR_ADDRS[i], &distance_mm, &confidence);
+
+      if (!valid)
+      {
+        distance_mm = LASER_DISTANCE_INVALID_MM;
+      }
+
+      if (laser_state_mutex != NULL && xSemaphoreTake(laser_state_mutex, pdMS_TO_TICKS(10)) == pdTRUE)
+      {
+        g_laser_state.distance_mm[i] = distance_mm;
+        g_laser_state.confidence[i] = confidence;
+        g_laser_state.valid[i] = valid;
+        g_laser_state.update_ms[i] = millis();
+        xSemaphoreGive(laser_state_mutex);
+      }
+
+      vTaskDelay(pdMS_TO_TICKS(LASER_SENSOR_INTERVAL_MS));
+    }
+  }
+}
+
 void ota_worker_task(void *parameter)
 {
   (void)parameter;
@@ -1956,6 +2221,7 @@ void micro_ros_task(void *parameter)
   (void)parameter;
 
   ControllerState_t local_state;
+  LaserSensorState_t local_laser_state;
   uint32_t last_ping_check_ms = 0;
   uint32_t last_publish_ms = 0;
   uint32_t last_alive_log_ms = 0;
@@ -2074,6 +2340,11 @@ void micro_ros_task(void *parameter)
             btn_reverse_msg.data  = local_state.btn_reverse;
             encoder_count_msg.data = local_state.encoder_count;
             travel_m_msg.data = local_state.travel_m;
+            laser_snapshot_state(&local_laser_state);
+            for (uint8_t i = 0; i < LASER_SENSOR_COUNT; i++)
+            {
+              laser_distances_data[i] = local_laser_state.distance_mm[i];
+            }
 
             // motion_reached 只发布一次，到达后下一次发送立即清零
             motion_reached_msg.data = g_motion_reached_event;
@@ -2089,6 +2360,7 @@ void micro_ros_task(void *parameter)
             rcl_ret_t ret7 = rcl_publish(&auto_return_home_done_pub, &auto_return_home_done_msg, NULL);
             rcl_ret_t ret8 = rcl_publish(&encoder_count_pub, &encoder_count_msg, NULL);
             rcl_ret_t ret9 = rcl_publish(&travel_m_pub, &travel_m_msg, NULL);
+            rcl_ret_t ret_laser = rcl_publish(&laser_distances_pub, &laser_distances_msg, NULL);
             ota_publish_progress(ota_progress);
             ota_publish_status(ota_job_id, ota_phase, ota_message, ota_progress);
 
@@ -2100,7 +2372,8 @@ void micro_ros_task(void *parameter)
                 ret6 == RCL_RET_OK &&
                 ret7 == RCL_RET_OK &&
                 ret8 == RCL_RET_OK &&
-                ret9 == RCL_RET_OK)
+                ret9 == RCL_RET_OK &&
+                ret_laser == RCL_RET_OK)
             {
               Serial.print("[publish] mode=");
               Serial.print(local_state.manual_mode ? "MANUAL" : "AUTO");
@@ -2117,7 +2390,17 @@ void micro_ros_task(void *parameter)
               Serial.print(" reached=");
               Serial.print(motion_reached_msg.data ? "1" : "0");
               Serial.print(" auto_done=");
-              Serial.println(auto_return_home_done_msg.data ? "1" : "0");
+              Serial.print(auto_return_home_done_msg.data ? "1" : "0");
+              Serial.print(" laser_mm=");
+              for (uint8_t i = 0; i < LASER_SENSOR_COUNT; i++)
+              {
+                Serial.print(local_laser_state.distance_mm[i]);
+                if (i < LASER_SENSOR_COUNT - 1)
+                {
+                  Serial.print(",");
+                }
+              }
+              Serial.println();
             }
             else
             {
@@ -2168,6 +2451,16 @@ void setup()
     }
   }
 
+  laser_state_mutex = xSemaphoreCreateMutex();
+  if (laser_state_mutex == NULL)
+  {
+    Serial.println("[system] create laser mutex failed");
+    while (1)
+    {
+      delay(1000);
+    }
+  }
+
   ota_state_mutex = xSemaphoreCreateMutex();
   if (ota_state_mutex == NULL)
   {
@@ -2206,6 +2499,7 @@ void setup()
   }
 
   xTaskCreate(io_control_task, "io_control_task", 4096, NULL, 3, NULL);
+  xTaskCreate(laser_sensor_task, "laser_sensor_task", 4096, NULL, 3, NULL);
   xTaskCreate(micro_ros_task, "micro_ros_task", 16384, NULL, 5, NULL);
   xTaskCreate(ota_worker_task, "ota_worker_task", 12288, NULL, 4, NULL);
 

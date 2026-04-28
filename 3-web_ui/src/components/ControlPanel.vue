@@ -172,10 +172,6 @@
 
         <div class="state-bar hud-panel">
           <div class="pill">
-            <span>电机状态</span>
-            <strong>{{ motorEnabled ? '已启动' : '未启动' }}</strong>
-          </div>
-          <div class="pill">
             <span>运行方向</span>
             <strong>{{ directionLabel }}</strong>
           </div>
@@ -184,12 +180,16 @@
             <strong>{{ positionText }}</strong>
           </div>
           <div class="pill">
-            <span>湿度</span>
-            <strong>{{ humidityText }}</strong>
+            <span>测距1</span>
+            <strong>{{ laserDistance1Text }}</strong>
           </div>
           <div class="pill">
-            <span>到位状态</span>
-            <strong>{{ motionReached ? '已到位' : '未到位' }}</strong>
+            <span>测距2</span>
+            <strong>{{ laserDistance2Text }}</strong>
+          </div>
+          <div class="pill">
+            <span>测距3</span>
+            <strong>{{ laserDistance3Text }}</strong>
           </div>
         </div>
       </div>
@@ -213,6 +213,9 @@ const props = defineProps({
   motorEnabled: Boolean,
   motorRunState: Number,
   motionReached: Boolean,
+  laserDistance1Mm: Number,
+  laserDistance2Mm: Number,
+  laserDistance3Mm: Number,
   setPatrolMode: Function,
   publishMoveCommand: Function,
   startAutoInspection: Function,
@@ -259,7 +262,9 @@ const directionLabel = computed(() => {
 })
 
 const positionText = computed(() => `${formatValue(props.travelMeters, 2)} m`)
-const humidityText = computed(() => `${formatValue(props.humidity, 1)} %`)
+const laserDistance1Text = computed(() => formatLaserDistance(props.laserDistance1Mm))
+const laserDistance2Text = computed(() => formatLaserDistance(props.laserDistance2Mm))
+const laserDistance3Text = computed(() => formatLaserDistance(props.laserDistance3Mm))
 const forwardButtonImage = computed(() => (isManualMode.value ? forwardActiveImage : forwardInactiveImage))
 const reverseButtonImage = computed(() => (isManualMode.value ? reverseActiveImage : reverseInactiveImage))
 const startButtonImage = computed(() => (isAutoMode.value ? startActiveImage : startInactiveImage))
@@ -297,6 +302,14 @@ const testStateLabel = computed(() => {
 const isStartTestDisabled = computed(() => props.testState !== TEST_MODE_STATES.WAITING_START)
 const isTriggerDisabled = computed(() => props.testState !== TEST_MODE_STATES.WAITING_TRIGGER)
 const isFinishDisabled = computed(() => props.testState !== TEST_MODE_STATES.READY_FINISH)
+
+function formatLaserDistance(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return '--'
+  }
+  return `${(numeric / 1000).toFixed(2)} m`
+}
 
 function toggleMove(direction, active) {
   if (!isManualMode.value) {

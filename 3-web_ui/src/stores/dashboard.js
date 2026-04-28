@@ -502,6 +502,9 @@ export const useDashboardStore = defineStore('dashboard', {
     motorRunState: 0,
     encoderCount: 0,
     travelMeters: 0,
+    laserDistance1Mm: -1,
+    laserDistance2Mm: -1,
+    laserDistance3Mm: -1,
     motionReached: false,
     historyList: [],
     historyLoading: false,
@@ -706,6 +709,9 @@ export const useDashboardStore = defineStore('dashboard', {
       this.pointCloudStreamActive = false
       this.pointCloudLastMessageAt = 0
       this.latestLivePointCloudPoints = []
+      this.laserDistance1Mm = -1
+      this.laserDistance2Mm = -1
+      this.laserDistance3Mm = -1
       this.restoreDefaultPointCloud()
     },
     startAutoAssembly() {

@@ -739,6 +739,15 @@ export function useRosDashboard() {
     )
 
     unsubscribers.push(
+      rosService.subscribe(appConfig.topics.laserDistances, (message) => {
+        const values = Array.isArray(message.data) ? message.data : []
+        store.updateRosMetric('laserDistance1Mm', Number(values[0] ?? -1))
+        store.updateRosMetric('laserDistance2Mm', Number(values[1] ?? -1))
+        store.updateRosMetric('laserDistance3Mm', Number(values[2] ?? -1))
+      })
+    )
+
+    unsubscribers.push(
       rosService.subscribe(appConfig.topics.motionReached, (message) => {
         store.updateRosMetric('motionReached', Boolean(message.data))
       })
